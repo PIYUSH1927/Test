@@ -240,7 +240,7 @@ export default function Generated() {
 
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
-  const [scale, setScale] = useState(window.innerWidth < 786 ? 2.5 : 3.5);
+  const [scale, setScale] = useState(window.innerWidth < 786 ? 2 : 3.5);
   const floorPlanRef = useRef<HTMLDivElement>(null);
   const calculateBounds = () => {
     const allPoints = floorPlanData.rooms.flatMap((room) => room.floor_polygon);
