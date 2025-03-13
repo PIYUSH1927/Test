@@ -262,7 +262,7 @@ export default function Generated() {
       window.removeEventListener("resize", handleResize);
     };
   }, []);
-  
+  const isMobile = window.innerWidth < 786;
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const isClickOutsideRooms = !Array.from(
@@ -318,20 +318,22 @@ export default function Generated() {
     <div>
       <style>{styles}</style>
 
-      <div
-        ref={floorPlanRef}
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          transform: "translate(-35%, -46%)",
-          width: `${contentWidth * scale}px`,
-          height: `${contentHeight * scale}px`,
-          
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      
+
+<div
+  ref={floorPlanRef}
+  style={{
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    transform: isMobile ? "translate(-40%, -46%)" : "translate(-30%, -46%)",
+    width: `${contentWidth * scale}px`,
+    height: `${contentHeight * scale}px`,
+    justifyContent: "center",
+    alignItems: "center",
+  }}
+>
+
            <p style={{textAlign:"center", marginBottom:"-35px"}}>
           <b>Total Area:</b> {floorPlanData.total_area} ft² &nbsp;|&nbsp;{" "}
           <b>Total Rooms:</b> {floorPlanData.room_count}
