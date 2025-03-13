@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback , useEffect} from "react";
 import { InfiniteGrid } from "./Playground/Grid";
 import Generated from "./Playground/Generated";
 import { Compass } from "./Playground/Compass";
@@ -28,6 +28,72 @@ const Playground = () => {
   const [showAll, setShowAll] = useState(false);
   const [allottedWidth, setAllottedWidth] = useState(30);
   const [allottedHeight, setAllottedHeight] = useState(40);
+
+  const [touchStartDistance, setTouchStartDistance] = useState(0);
+
+const getDistance = (touches: React.TouchList): number => {
+  if (touches.length < 2) return 0;
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>): void => {
+    if (isModalOpen) return;
+    
+    if (e.touches.length === 2) {
+      // Pinch gesture start
+      const distance = getDistance(e.touches);
+      setTouchStartDistance(distance);
+    } else if (e.touches.length === 1) {
+      // Single touch (for dragging)
+      setIsDragging(true);
+      setLastMousePosition({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    }
+  };
+  
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>): void => {
+    if (isModalOpen) return;
+    e.preventDefault();
+    
+    if (e.touches.length === 2) {
+      // Pinch gesture for zooming
+      const distance = getDistance(e.touches);
+      if (touchStartDistance > 0) {
+        const delta = distance / touchStartDistance;
+        setScale((prevScale) => Math.min(Math.max(0.1, prevScale * delta), 20));
+        setTouchStartDistance(distance);
+      }
+    } else if (e.touches.length === 1 && isDragging) {
+      // Single touch move for panning
+      const touch = e.touches[0];
+      const dx = touch.clientX - lastMousePosition.x;
+      const dy = touch.clientY - lastMousePosition.y;
+      setPosition((prev) => ({ x: prev.x + dx / scale, y: prev.y + dy / scale }));
+      setLastMousePosition({ x: touch.clientX, y: touch.clientY });
+    }
+  };
+  
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>): void => {
+    setIsDragging(false);
+    setTouchStartDistance(0);
+  };
+
+  useEffect(() => {
+    const element = document.querySelector('.absolute.inset-0') as HTMLElement;
+    if (element) {
+      element.addEventListener('touchstart', handleTouchStart as unknown as EventListener, { passive: false });
+      element.addEventListener('touchmove', handleTouchMove as unknown as EventListener, { passive: false });
+      element.addEventListener('touchend', handleTouchEnd as unknown as EventListener);
+      
+      return () => {
+        element.removeEventListener('touchstart', handleTouchStart as unknown as EventListener);
+        element.removeEventListener('touchmove', handleTouchMove as unknown as EventListener);
+        element.removeEventListener('touchend', handleTouchEnd as unknown as EventListener);
+      };
+    }
+  }, [scale, isDragging, lastMousePosition, touchStartDistance, isModalOpen]);
+
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
