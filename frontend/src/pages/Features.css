@@ -1,0 +1,215 @@
+/* Features.css */
+
+:root {
+    /* Light theme */
+    --bg-primary: #ffffff;
+    --bg-card: rgba(255, 255, 255, 0.8);
+    --text-primary: #1a1a1a;
+    --text-secondary: #666666;
+    --color-accent: #0066ff;
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Dark theme */
+  @media (prefers-color-scheme: dark) {
+    :root {
+        --bg-primary: #000000;
+        --bg-card: rgba(29, 29, 31, 0.8);
+        --text-primary: #ffffff;
+        --text-secondary: #ffffff;
+        --color-accent: #3b82f6;
+        --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+        --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
+    }
+  
+    /* Force dark mode styles */
+    .features-container {
+        background-color: #000000 !important;
+    }
+  
+    .feature-card {
+        background: rgba(29, 29, 31, 0.8) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  
+    .feature-list-item {
+        background: rgba(29, 29, 31, 0.8) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #ffffff !important;
+    }
+  
+    .feature-title,
+    .features-title {
+        color: #ffffff !important;
+    }
+  
+    .feature-description,
+    .features-subtitle,
+    .feature-text {
+        color: #ffffff !important;
+    }
+  }
+  
+  .features-container {
+    min-height: 100vh;
+    padding-top: 70px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+  
+  /* Header Styles */
+  .features-header {
+    padding: 0rem 2rem;
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  
+  .features-title {
+    font-size: clamp(2.5rem, 5vw, 4rem);
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  
+  .features-subtitle {
+    font-size: clamp(1.1rem, 2vw, 1.25rem);
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  
+  /* Features Grid */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    padding: 2rem;
+    padding-top: 1rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .upcoming-title {
+    text-align: center; /* Centers the title */
+    font-size: 2.5rem; /* Increased size */
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
+  
+  /* Feature Card */
+  .feature-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 1.5rem;
+    padding: 2.5rem;
+    transition: all 0.3s ease;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .feature-card:hover {
+    transform: translateY(-8px);
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .feature-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .feature-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+  }
+  
+  .feature-description {
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+  
+  /* Feature List */
+  .feature-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .feature-list-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--bg-card);
+    border-radius: 0.75rem;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .feature-list-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .feature-check {
+    color: var(--color-accent);
+    flex-shrink: 0;
+    margin-top: 0.25rem;
+  }
+  
+  .feature-text {
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  
+  /* Responsive Design */
+  @media screen and (max-width: 768px) {
+    .features-grid {
+        padding: 1rem;
+        gap: 1.5rem;
+    }
+  
+    .feature-card {
+        padding: 1.5rem;
+    }
+  
+    .features-header {
+        padding: 3rem 1.5rem;
+    }
+  
+    .feature-list-item {
+        padding: 0.75rem;
+    }
+  }
+  
+  @media screen and (max-width: 480px) {
+    .features-grid {
+        grid-template-columns: 1fr;
+    }
+  
+    .feature-card {
+        padding: 1.25rem;
+    }
+  }
+  
+  /* Animation Support */
+  @media (prefers-reduced-motion: reduce) {
+    .feature-card,
+    .feature-list-item {
+        transition: none;
+    }
+  }
+  
+  /* Better text rendering */
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }

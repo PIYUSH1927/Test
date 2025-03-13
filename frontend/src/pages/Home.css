@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* System Dark Mode Colors */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+  
+  body {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+  }
+}
+
+/* Base Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Full Screen Container */
+.hero-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Center Content */
+.hero-content {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  text-align: center;
+  padding: 0 20px;
+}
+
+/* Typography */
+.hero-title {
+  font-size: clamp(3rem, 12vw, 8rem); /* Reduced size */
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 1rem;
+  letter-spacing: -0.02em;
+  color: #000000;
+}
+
+.hero-subtitle {
+  font-size: clamp(1.2rem, 3vw, 2.5rem); /* Adjusted for proportion */
+  font-weight: 700;
+  line-height: 1.2;
+  color: #000000;
+}
+
+/* Dark Mode Styles */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #000000;
+  }
+  
+  .hero-title,
+  .hero-subtitle {
+    color: #ffffff !important;
+  }
+  
+  .nav-menu {
+    background-color: rgba(0, 0, 0, 0.8);
+  }
+  
+  .nav-link {
+    color: #ffffff;
+  }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: clamp(2.5rem, 10vw, 6rem);
+  }
+  
+  .hero-subtitle {
+    font-size: clamp(1rem, 2.5vw, 2rem);
+  }
+}
+
+/* Smooth Scrolling */
+html {
+  scroll-behavior: smooth;
+}
