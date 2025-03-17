@@ -506,6 +506,8 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
     if (event.touches.length !== 1) return;
 
     event.preventDefault();
+
+    document.body.setAttribute('data-room-touch-interaction', 'true');
     
     const touch = event.touches[0];
     const svgElement = svgRef.current;
@@ -616,7 +618,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
   const handleTouchEnd = useCallback(() => {
 
     document.body.removeAttribute('data-room-touch-interaction');
-    
+
     setDragState({
       active: false,
       roomId: null,
@@ -797,7 +799,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
           width="100%" 
           height="100%" 
           ref={svgRef}
-          style={{ touchAction: "none" }} /* Prevent default touch actions */
+          style={{ touchAction: "none" }} 
         >
           <defs>
             <marker
@@ -826,10 +828,10 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
           </defs>
 
           <line
-            x1={transformCoordinates({ x: bounds.minX - 10, z: bounds.minZ }).x}
-            y1={transformCoordinates({ x: bounds.minX, z: bounds.minZ }).y}
-            x2={transformCoordinates({ x: bounds.minX - 10, z: bounds.maxZ }).x}
-            y2={transformCoordinates({ x: bounds.minX, z: bounds.maxZ }).y}
+            x1={transformCoordinates({ x: bounds.minX - 10, z: bounds.minZ }).x + 10}
+            y1={transformCoordinates({ x: bounds.minX, z: bounds.minZ }).y + 10}
+            x2={transformCoordinates({ x: bounds.minX - 10, z: bounds.maxZ }).x + 10}
+            y2={transformCoordinates({ x: bounds.minX, z: bounds.maxZ }).y + 10}
             stroke="black"
             strokeWidth="1"
             markerStart="url(#arrow1)"
@@ -909,7 +911,6 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
                   onTouchStart={(e) => handleTouchStart(e, room.id)}
                 />
                 
-                {/* Render resize handles on vertices when room is selected */}
                 {selectedRoomId === room.id && transformedPoints.map((point, index) => (
                   <circle
                     key={`handle-${room.id}-${index}`}
