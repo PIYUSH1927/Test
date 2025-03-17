@@ -142,6 +142,16 @@ button {
 button:hover {
   background-color: #45a049;
 }
+
+@media (max-width: 786px) {
+  .room-label {
+    font-size: 8px !important;
+  }
+  
+  .room-name {
+    font-size: 10px !important;
+  }
+}
 `;
 
 export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: number }) {
@@ -926,7 +936,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
                 <text
                   className="room-label room-name"
                   x={centroid.x}
-                  y={centroid.y - 10}
+                  y={centroid.y - 3}
                   pointerEvents="none"
                 >
                   {room.room_type}
@@ -945,7 +955,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
                     <text
                       className="room-label"
                       x={centroid.x}
-                      y={centroid.y + 25}
+                      y={centroid.y + 20}
                       pointerEvents="none"
                     >
                       ({room.area.toFixed(2)} m²)
