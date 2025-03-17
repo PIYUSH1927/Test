@@ -40,13 +40,16 @@ const getDistance = (touches: React.TouchList): number => {
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>): void => {
     if (isModalOpen) return;
+
+    if (document.body.getAttribute('data-room-touch-interaction') === 'true') {
+      return; 
+    }
     
     if (e.touches.length === 2) {
-      // Pinch gesture start
+      
       const distance = getDistance(e.touches);
       setTouchStartDistance(distance);
     } else if (e.touches.length === 1) {
-      // Single touch (for dragging)
       setIsDragging(true);
       setLastMousePosition({ x: e.touches[0].clientX, y: e.touches[0].clientY });
     }
@@ -54,10 +57,14 @@ const getDistance = (touches: React.TouchList): number => {
   
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>): void => {
     if (isModalOpen) return;
+
+    if (document.body.getAttribute('data-room-touch-interaction') === 'true') {
+      return;
+    }
+
     e.preventDefault();
     
     if (e.touches.length === 2) {
-      // Pinch gesture for zooming
       const distance = getDistance(e.touches);
       if (touchStartDistance > 0) {
         const delta = distance / touchStartDistance;
@@ -65,7 +72,6 @@ const getDistance = (touches: React.TouchList): number => {
         setTouchStartDistance(distance);
       }
     } else if (e.touches.length === 1 && isDragging) {
-      // Single touch move for panning
       const touch = e.touches[0];
       const dx = touch.clientX - lastMousePosition.x;
       const dy = touch.clientY - lastMousePosition.y;
@@ -82,13 +88,27 @@ const getDistance = (touches: React.TouchList): number => {
   useEffect(() => {
     const element = document.querySelector('.absolute.inset-0') as HTMLElement;
     if (element) {
-      element.addEventListener('touchstart', handleTouchStart as unknown as EventListener, { passive: false });
-      element.addEventListener('touchmove', handleTouchMove as unknown as EventListener, { passive: false });
+      const touchStartWrapper = (e: TouchEvent) => {
+        if (document.body.getAttribute('data-room-touch-interaction') === 'true') {
+          return;
+        }
+        (handleTouchStart as unknown as EventListener)(e);
+      };
+      
+      const touchMoveWrapper = (e: TouchEvent) => {
+        if (document.body.getAttribute('data-room-touch-interaction') === 'true') {
+          return;
+        }
+        (handleTouchMove as unknown as EventListener)(e);
+      };
+      
+      element.addEventListener('touchstart', touchStartWrapper, { passive: false });
+      element.addEventListener('touchmove', touchMoveWrapper, { passive: false });
       element.addEventListener('touchend', handleTouchEnd as unknown as EventListener);
       
       return () => {
-        element.removeEventListener('touchstart', handleTouchStart as unknown as EventListener);
-        element.removeEventListener('touchmove', handleTouchMove as unknown as EventListener);
+        element.removeEventListener('touchstart', touchStartWrapper);
+        element.removeEventListener('touchmove', touchMoveWrapper);
         element.removeEventListener('touchend', handleTouchEnd as unknown as EventListener);
       };
     }
