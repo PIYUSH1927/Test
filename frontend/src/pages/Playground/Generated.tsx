@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 interface Point {
   x: number;
@@ -21,6 +21,28 @@ interface FloorPlanData {
   rooms: Room[];
 }
 
+interface DragState {
+  active: boolean;
+  roomId: string | null;
+  vertexIndex: number | null;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  isResizing: boolean;
+}
+
+const roomColors: Record<string, string> = {
+  MasterRoom: "#FFD3B6",  
+  LivingRoom: "#FFAAA5",  
+  ChildRoom: "#D5AAFF",   
+  Kitchen: "#FFCC5C",    
+  Bathroom: "#85C1E9",    
+  Balcony: "#B2DFDB",     
+  SecondRoom: "#F6D55C",  
+  DiningRoom: "#A5D6A7",  
+};
+
 const styles = `
 .floor-plan {
   position: relative;
@@ -30,14 +52,13 @@ const styles = `
 }
 
 .room-polygon {
-  fill: #E8E8E8;
   opacity: 0.8;
   stroke: #000;  
   stroke-width: 3px;  
-  cursor: pointer;
+  cursor: move;
   transition: all 0.2s ease;
   stroke-linejoin: miter; 
-  shape-rendering: crispEdges
+  shape-rendering: crispEdges;
 }
 
 svg {
@@ -48,6 +69,17 @@ svg {
   fill: rgba(224, 224, 255, 0.8);
   stroke: #0000ff;
   stroke-width: 4px; 
+}
+
+.resize-handle {
+  fill: white;
+  stroke: black;
+  stroke-width: 2px;
+  cursor: nwse-resize;
+}
+
+.resize-handle:hover {
+  fill: #ffcc00;
 }
 
 .room-label {
@@ -63,7 +95,6 @@ svg {
 }
 
 .controls {
-  
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
@@ -71,7 +102,6 @@ svg {
 
 .room-info {
   margin-top: 20px;
- 
   border: 1px solid #ccc;
   border-radius: 5px;
 }
@@ -107,20 +137,22 @@ button:hover {
 }
 `;
 
-export default function Generated() {
+export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: number }) {
+
+  const [hasChanges, setHasChanges] = useState(false);
   const [floorPlanData, setFloorPlanData] = useState<FloorPlanData>({
     room_count: 8,
     total_area: 62.57,
-   "room_types": [
-    "SecondRoom",
-    "MasterRoom",
-    "Bathroom",
-    "LivingRoom",
-    "Balcony",
-    "Kitchen",
-    "Balcony",
-    "Balcony"
-  ],
+    "room_types": [
+      "SecondRoom",
+      "MasterRoom",
+      "Bathroom",
+      "LivingRoom",
+      "Balcony",
+      "Kitchen",
+      "Balcony",
+      "Balcony"
+    ],
     rooms: [
       {
         id: "room|0",
@@ -239,9 +271,22 @@ export default function Generated() {
   const twidth = 10;
 
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-
   const [scale, setScale] = useState(window.innerWidth < 786 ? 2.1 : 3.5);
   const floorPlanRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  
+  // Drag state to manage room dragging and resizing - improved state structure
+  const [dragState, setDragState] = useState<DragState>({
+    active: false,
+    roomId: null,
+    vertexIndex: null,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    isResizing: false
+  });
+
   const calculateBounds = () => {
     const allPoints = floorPlanData.rooms.flatMap((room) => room.floor_polygon);
     const minX = Math.min(...allPoints.map((p) => p.x));
@@ -262,15 +307,17 @@ export default function Generated() {
       window.removeEventListener("resize", handleResize);
     };
   }, []);
-  const isMobile = window.innerWidth < 786;
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const isClickOutsideRooms = !Array.from(
-        document.querySelectorAll(".room-polygon")
-      ).some((polygon) => polygon.contains(event.target as Node));
+      if (!dragState.active) {
+        const isClickOutsideRooms = !Array.from(
+          document.querySelectorAll(".room-polygon")
+        ).some((polygon) => polygon.contains(event.target as Node));
 
-      if (isClickOutsideRooms && selectedRoomId) {
-        setSelectedRoomId(null);
+        if (isClickOutsideRooms && selectedRoomId) {
+          setSelectedRoomId(null);
+        }
       }
     };
 
@@ -279,23 +326,27 @@ export default function Generated() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [selectedRoomId]);
+  }, [selectedRoomId, dragState.active]);
 
   const bounds = calculateBounds();
   const padding = 20;
   const contentWidth = bounds.maxX - bounds.minX + 2 * padding;
   const contentHeight = bounds.maxZ - bounds.minZ + 2 * padding;
+  const isMobile = window.innerWidth < 786;
 
-  const transformCoordinates = (point: Point) => {
+  const transformCoordinates = useCallback((point: Point) => {
     return {
       x: (point.x - bounds.minX + padding) * scale,
       y: (point.z - bounds.minZ + padding) * scale,
     };
-  };
+  }, [bounds.minX, bounds.minZ, padding, scale]);
 
-  const handleRoomClick = (roomId: string) => {
-    setSelectedRoomId(roomId === selectedRoomId ? null : roomId);
-  };
+  const reverseTransformCoordinates = useCallback((x: number, y: number) => {
+    return {
+      x: x / scale + bounds.minX - padding,
+      z: y / scale + bounds.minZ - padding,
+    };
+  }, [bounds.minX, bounds.minZ, padding, scale]);
 
   const calculateRoomCentroid = (points: { x: number; y: number }[]) => {
     if (points.length === 0) return { x: 0, y: 0 };
@@ -314,32 +365,265 @@ export default function Generated() {
     };
   };
 
+  const calculateRoomArea = (polygon: Point[]) => {
+    if (polygon.length < 3) return 0;
+    
+    let area = 0;
+    for (let i = 0; i < polygon.length; i++) {
+      const j = (i + 1) % polygon.length;
+      area += polygon[i].x * polygon[j].z;
+      area -= polygon[j].x * polygon[i].z;
+    }
+    
+    area = Math.abs(area) / 2;
+    return area / 100; // Scale factor to convert to m²
+  };
+
+  const calculateRoomDimensions = (polygon: Point[]) => {
+    if (polygon.length < 3) return { width: 0, height: 0 };
+    
+    const xCoords = polygon.map(p => p.x);
+    const zCoords = polygon.map(p => p.z);
+    
+    const minX = Math.min(...xCoords);
+    const maxX = Math.max(...xCoords);
+    const minZ = Math.min(...zCoords);
+    const maxZ = Math.max(...zCoords);
+    
+    return {
+      width: (maxX - minX) / 10, // Scale factor to convert to meters
+      height: (maxZ - minZ) / 10, // Scale factor to convert to meters
+    };
+  };
+
+  const handleRoomClick = (roomId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedRoomId(roomId === selectedRoomId ? null : roomId);
+  };
+
+  const handleMouseDown = (event: React.MouseEvent, roomId: string) => {
+    event.stopPropagation();
+    event.preventDefault();
+    
+    if (event.button !== 0) return; // Only handle left click
+    
+    const svgElement = svgRef.current;
+    if (!svgElement) return;
+    
+    const svgRect = svgElement.getBoundingClientRect();
+    const mouseX = event.clientX - svgRect.left;
+    const mouseY = event.clientY - svgRect.top;
+    
+    setDragState({
+      active: true,
+      roomId,
+      vertexIndex: null,
+      startX: mouseX,
+      startY: mouseY,
+      lastX: mouseX,
+      lastY: mouseY,
+      isResizing: false
+    });
+
+    setHasChanges(true);
+    setSelectedRoomId(roomId);
+  };
+
+  const handleVertexMouseDown = (event: React.MouseEvent, roomId: string, vertexIndex: number) => {
+    event.stopPropagation();
+    event.preventDefault();
+    
+    const svgElement = svgRef.current;
+    if (!svgElement) return;
+    
+    const svgRect = svgElement.getBoundingClientRect();
+    const mouseX = event.clientX - svgRect.left;
+    const mouseY = event.clientY - svgRect.top;
+    
+    setDragState({
+      active: true,
+      roomId,
+      vertexIndex,
+      startX: mouseX,
+      startY: mouseY,
+      lastX: mouseX,
+      lastY: mouseY,
+      isResizing: true
+    });
+    
+    setSelectedRoomId(roomId);
+  };
+
+  const handleMouseMove = useCallback((event: MouseEvent) => {
+    if (!dragState.active || !dragState.roomId) return;
+    
+    const svgElement = svgRef.current;
+    if (!svgElement) return;
+    
+    const svgRect = svgElement.getBoundingClientRect();
+    const mouseX = event.clientX - svgRect.left;
+    const mouseY = event.clientY - svgRect.top;
+    
+    const deltaX = mouseX - dragState.lastX;
+    const deltaY = mouseY - dragState.lastY;
+    
+    setFloorPlanData(prevData => {
+      const updatedRooms = [...prevData.rooms];
+      const roomIndex = updatedRooms.findIndex(room => room.id === dragState.roomId);
+      
+      if (roomIndex === -1) return prevData;
+      
+      const room = {...updatedRooms[roomIndex]};
+      
+      if (dragState.isResizing && dragState.vertexIndex !== null) {
+        // Resize mode - move just one vertex
+        const updatedPolygon = [...room.floor_polygon];
+        const point = reverseTransformCoordinates(mouseX, mouseY);
+        updatedPolygon[dragState.vertexIndex] = point;
+        
+        // Calculate new dimensions
+        const dimensions = calculateRoomDimensions(updatedPolygon);
+        const area = calculateRoomArea(updatedPolygon);
+        
+        room.floor_polygon = updatedPolygon;
+        room.width = dimensions.width;
+        room.height = dimensions.height;
+        room.area = area;
+      } else {
+        // Move mode - translate entire polygon
+        const updatedPolygon = room.floor_polygon.map(point => {
+          return {
+            x: point.x + deltaX / scale,
+            z: point.z + deltaY / scale
+          };
+        });
+        
+        room.floor_polygon = updatedPolygon;
+      }
+      
+      updatedRooms[roomIndex] = room;
+      
+      // Recalculate total area
+      const totalArea = updatedRooms.reduce((sum, room) => sum + room.area, 0);
+      
+      return {
+        ...prevData,
+        rooms: updatedRooms,
+        total_area: parseFloat(totalArea.toFixed(2))
+      };
+    });
+    
+    setDragState(prev => ({
+      ...prev,
+      lastX: mouseX,
+      lastY: mouseY
+    }));
+  }, [dragState, reverseTransformCoordinates, scale]);
+
+  const handleMouseUp = useCallback(() => {
+    setDragState({
+      active: false,
+      roomId: null,
+      vertexIndex: null,
+      startX: 0,
+      startY: 0,
+      lastX: 0,
+      lastY: 0,
+      isResizing: false
+    });
+  }, []);
+
+  // Add and remove event listeners using useEffect
+  useEffect(() => {
+    if (dragState.active) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      
+      // Clean up event listeners when component unmounts or drag state changes
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [dragState.active, handleMouseMove, handleMouseUp]);
+
+  // Check if rooms are overlapping (optional - can be used for validation)
+  const checkRoomOverlap = () => {
+    const overlaps = [];
+    
+    for (let i = 0; i < floorPlanData.rooms.length; i++) {
+      for (let j = i + 1; j < floorPlanData.rooms.length; j++) {
+        // Simplified overlap check - just using bounding boxes
+        const room1 = floorPlanData.rooms[i];
+        const room2 = floorPlanData.rooms[j];
+        
+        const xCoords1 = room1.floor_polygon.map(p => p.x);
+        const zCoords1 = room1.floor_polygon.map(p => p.z);
+        const minX1 = Math.min(...xCoords1);
+        const maxX1 = Math.max(...xCoords1);
+        const minZ1 = Math.min(...zCoords1);
+        const maxZ1 = Math.max(...zCoords1);
+        
+        const xCoords2 = room2.floor_polygon.map(p => p.x);
+        const zCoords2 = room2.floor_polygon.map(p => p.z);
+        const minX2 = Math.min(...xCoords2);
+        const maxX2 = Math.max(...xCoords2);
+        const minZ2 = Math.min(...zCoords2);
+        const maxZ2 = Math.max(...zCoords2);
+        
+        const overlap = !(
+          maxX1 < minX2 || 
+          minX1 > maxX2 || 
+          maxZ1 < minZ2 || 
+          minZ1 > maxZ2
+        );
+        
+        if (overlap) {
+          overlaps.push([room1.id, room2.id]);
+        }
+      }
+    }
+    
+    return overlaps;
+  };
+
+  // Function to save the current floor plan
+  const saveFloorPlan = () => {
+    // Here you would implement save functionality
+    console.log('Floor plan data:', JSON.stringify(floorPlanData));
+    alert('Floor plan saved! Check console for data.');
+    setHasChanges(false); // Reset the changes flag after saving
+
+  };
+
   return (
     <div>
       <style>{styles}</style>
 
-      
+      <div
+        ref={floorPlanRef}
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          transform: isMobile ? "translate(-40%, -46%)" : "translate(-30%, -49%)",
+          width: `${contentWidth * scale}px`,
+          height: `${contentHeight * scale}px`,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
 
-<div
-  ref={floorPlanRef}
-  style={{
-    position: "absolute",
-    left: "50%",
-    top: "50%",
-    transform: isMobile ? "translate(-40%, -46%)" : "translate(-30%, -46%)",
-    width: `${contentWidth * scale}px`,
-    height: `${contentHeight * scale}px`,
-    justifyContent: "center",
-    alignItems: "center",
-  }}
->
-
-           <p style={{textAlign:"center", marginBottom:"-35px"}}>
-          <b>Total Area:</b> {floorPlanData.total_area} ft² &nbsp;|&nbsp;{" "}
+        <p style={{textAlign:"center", marginBottom:"-35px"}}>
+          <b>Total Area:</b> {floorPlanData.total_area.toFixed(2)} m² &nbsp;|&nbsp;{" "}
           <b>Total Rooms:</b> {floorPlanData.room_count}
         </p>
 
-        <svg width="100%" height="100%">
+        <svg 
+          width="100%" 
+          height="100%" 
+          ref={svgRef}
+        >
           <defs>
             <marker
               id="arrow"
@@ -393,7 +677,7 @@ export default function Generated() {
             fill="black"
             textAnchor="middle"
           >
-            {tlength} ft
+            {tlength} m
           </text>
 
           <line
@@ -423,7 +707,7 @@ export default function Generated() {
             fill="black"
             textAnchor="middle"
           >
-            {twidth} ft
+            {twidth} m
           </text>
 
           {floorPlanData.rooms.map((room) => {
@@ -444,13 +728,28 @@ export default function Generated() {
                     selectedRoomId === room.id ? "selected" : ""
                   }`}
                   points={polygonPoints}
-                  onClick={() => handleRoomClick(room.id)}
+                  fill={roomColors[room.room_type as keyof typeof roomColors] || "#E8E8E8"}
+                  onClick={(e) => handleRoomClick(room.id, e)}
+                  onMouseDown={(e) => handleMouseDown(e, room.id)}
                 />
+                
+                {/* Render resize handles on vertices when room is selected */}
+                {selectedRoomId === room.id && transformedPoints.map((point, index) => (
+                  <circle
+                    key={`handle-${room.id}-${index}`}
+                    cx={point.x}
+                    cy={point.y}
+                    r={6}
+                    className="resize-handle"
+                    onMouseDown={(e) => handleVertexMouseDown(e, room.id, index)}
+                  />
+                ))}
 
                 <text
                   className="room-label room-name"
                   x={centroid.x}
                   y={centroid.y - 10}
+                  pointerEvents="none"
                 >
                   {room.room_type}
                 </text>
@@ -461,6 +760,7 @@ export default function Generated() {
                       className="room-label"
                       x={centroid.x}
                       y={centroid.y + 10}
+                      pointerEvents="none"
                     >
                       {room.width.toFixed(1)}' × {room.height.toFixed(1)}'
                     </text>
@@ -468,8 +768,9 @@ export default function Generated() {
                       className="room-label"
                       x={centroid.x}
                       y={centroid.y + 25}
+                      pointerEvents="none"
                     >
-                      ({room.area.toFixed(2)} ft²)
+                      ({room.area.toFixed(2)} m²)
                     </text>
                   </>
                 ) : (
@@ -477,15 +778,27 @@ export default function Generated() {
                     className="room-label"
                     x={centroid.x}
                     y={centroid.y + 10}
+                    pointerEvents="none"
                   >
                     {room.width.toFixed(1)}' × {room.height.toFixed(1)}' (
-                    {room.area.toFixed(2)} ft²)
+                    {room.area.toFixed(2)} m²)
                   </text>
                 )}
               </g>
             );
           })}
         </svg>
+        {hasChanges && (
+        <div style={{ 
+          position: 'absolute', 
+          bottom: '-20px', 
+          left: '50%', 
+          transform: 'translateX(-50%)',
+          marginTop: '20px' 
+        }}>
+          <button onClick={saveFloorPlan}>Save Floor Plan</button>
+        </div>
+      )}
       </div>
     </div>
   );
