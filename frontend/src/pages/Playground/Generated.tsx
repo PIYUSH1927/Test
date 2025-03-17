@@ -63,6 +63,7 @@ const styles = `
 
 svg {
   vector-effect: non-scaling-stroke;
+  touch-action: none; /* Prevent default touch actions like scrolling */
 }
 
 .room-polygon.selected {
@@ -309,7 +310,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
   }, []);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (!dragState.active) {
         const isClickOutsideRooms = !Array.from(
           document.querySelectorAll(".room-polygon")
@@ -322,9 +323,11 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
     };
 
     document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
     };
   }, [selectedRoomId, dragState.active]);
 
@@ -396,11 +399,12 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
     };
   };
 
-  const handleRoomClick = (roomId: string, event: React.MouseEvent) => {
+  const handleRoomClick = (roomId: string, event: React.MouseEvent | React.TouchEvent) => {
     event.stopPropagation();
     setSelectedRoomId(roomId === selectedRoomId ? null : roomId);
   };
 
+  // Mouse handlers
   const handleMouseDown = (event: React.MouseEvent, roomId: string) => {
     event.stopPropagation();
     event.preventDefault();
@@ -453,6 +457,149 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
     
     setSelectedRoomId(roomId);
   };
+
+  // Touch handlers
+  // Touch handlers
+  const handleTouchStart = (event: React.TouchEvent, roomId: string) => {
+    event.stopPropagation();
+    event.preventDefault();
+    
+    if (event.touches.length !== 1) return; // Only handle single touch
+    
+    const touch = event.touches[0];
+    const svgElement = svgRef.current;
+    if (!svgElement) return;
+    
+    const svgRect = svgElement.getBoundingClientRect();
+    const touchX = touch.clientX - svgRect.left;
+    const touchY = touch.clientY - svgRect.top;
+    
+    setDragState({
+      active: true,
+      roomId,
+      vertexIndex: null,
+      startX: touchX,
+      startY: touchY,
+      lastX: touchX,
+      lastY: touchY,
+      isResizing: false
+    });
+
+    setHasChanges(true);
+    setSelectedRoomId(roomId);
+  };
+
+  const handleVertexTouchStart = (event: React.TouchEvent, roomId: string, vertexIndex: number) => {
+    event.stopPropagation();
+    event.preventDefault();
+    
+    if (event.touches.length !== 1) return; // Only handle single touch
+    
+    const touch = event.touches[0];
+    const svgElement = svgRef.current;
+    if (!svgElement) return;
+    
+    const svgRect = svgElement.getBoundingClientRect();
+    const touchX = touch.clientX - svgRect.left;
+    const touchY = touch.clientY - svgRect.top;
+    
+    setDragState({
+      active: true,
+      roomId,
+      vertexIndex,
+      startX: touchX,
+      startY: touchY,
+      lastX: touchX,
+      lastY: touchY,
+      isResizing: true
+    });
+    
+    setSelectedRoomId(roomId);
+  };
+
+  const handleTouchMove = useCallback((event: TouchEvent) => {
+    if (!dragState.active || !dragState.roomId) return;
+    
+    event.preventDefault(); // Prevent scrolling during drag
+    
+    if (event.touches.length !== 1) return;
+    
+    const touch = event.touches[0];
+    const svgElement = svgRef.current;
+    if (!svgElement) return;
+    
+    const svgRect = svgElement.getBoundingClientRect();
+    const touchX = touch.clientX - svgRect.left;
+    const touchY = touch.clientY - svgRect.top;
+    
+    const deltaX = touchX - dragState.lastX;
+    const deltaY = touchY - dragState.lastY;
+    
+    setFloorPlanData(prevData => {
+      const updatedRooms = [...prevData.rooms];
+      const roomIndex = updatedRooms.findIndex(room => room.id === dragState.roomId);
+      
+      if (roomIndex === -1) return prevData;
+      
+      const room = {...updatedRooms[roomIndex]};
+      
+      if (dragState.isResizing && dragState.vertexIndex !== null) {
+        // Resize mode - move just one vertex
+        const updatedPolygon = [...room.floor_polygon];
+        const point = reverseTransformCoordinates(touchX, touchY);
+        updatedPolygon[dragState.vertexIndex] = point;
+        
+        // Calculate new dimensions
+        const dimensions = calculateRoomDimensions(updatedPolygon);
+        const area = calculateRoomArea(updatedPolygon);
+        
+        room.floor_polygon = updatedPolygon;
+        room.width = dimensions.width;
+        room.height = dimensions.height;
+        room.area = area;
+      } else {
+        // Move mode - translate entire polygon
+        const updatedPolygon = room.floor_polygon.map(point => {
+          return {
+            x: point.x + deltaX / scale,
+            z: point.z + deltaY / scale
+          };
+        });
+        
+        room.floor_polygon = updatedPolygon;
+      }
+      
+      updatedRooms[roomIndex] = room;
+      
+      // Recalculate total area
+      const totalArea = updatedRooms.reduce((sum, room) => sum + room.area, 0);
+      
+      return {
+        ...prevData,
+        rooms: updatedRooms,
+        total_area: parseFloat(totalArea.toFixed(2))
+      };
+    });
+    
+    setDragState(prev => ({
+      ...prev,
+      lastX: touchX,
+      lastY: touchY
+    }));
+  }, [dragState, reverseTransformCoordinates, scale]);
+
+  const handleTouchEnd = useCallback(() => {
+    setDragState({
+      active: false,
+      roomId: null,
+      vertexIndex: null,
+      startX: 0,
+      startY: 0,
+      lastX: 0,
+      lastY: 0,
+      isResizing: false
+    });
+  }, []);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!dragState.active || !dragState.roomId) return;
@@ -536,16 +683,25 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
   // Add and remove event listeners using useEffect
   useEffect(() => {
     if (dragState.active) {
+      // Mouse events
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       
-      // Clean up event listeners when component unmounts or drag state changes
+      // Touch events
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd);
+      document.addEventListener('touchcancel', handleTouchEnd);
+      
+      // Clean up event listeners
       return () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+        document.removeEventListener('touchcancel', handleTouchEnd);
       };
     }
-  }, [dragState.active, handleMouseMove, handleMouseUp]);
+  }, [dragState.active, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
 
   // Check if rooms are overlapping (optional - can be used for validation)
   const checkRoomOverlap = () => {
@@ -593,7 +749,6 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
     console.log('Floor plan data:', JSON.stringify(floorPlanData));
     alert('Floor plan saved! Check console for data.');
     setHasChanges(false); // Reset the changes flag after saving
-
   };
 
   return (
@@ -623,6 +778,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
           width="100%" 
           height="100%" 
           ref={svgRef}
+          style={{ touchAction: "none" }} /* Prevent default touch actions */
         >
           <defs>
             <marker
@@ -731,6 +887,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
                   fill={roomColors[room.room_type as keyof typeof roomColors] || "#E8E8E8"}
                   onClick={(e) => handleRoomClick(room.id, e)}
                   onMouseDown={(e) => handleMouseDown(e, room.id)}
+                  onTouchStart={(e) => handleTouchStart(e, room.id)}
                 />
                 
                 {/* Render resize handles on vertices when room is selected */}
@@ -742,6 +899,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
                     r={6}
                     className="resize-handle"
                     onMouseDown={(e) => handleVertexMouseDown(e, room.id, index)}
+                    onTouchStart={(e) => handleVertexTouchStart(e, room.id, index)}
                   />
                 ))}
 
