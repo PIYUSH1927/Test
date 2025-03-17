@@ -59,11 +59,17 @@ const styles = `
   transition: all 0.2s ease;
   stroke-linejoin: miter; 
   shape-rendering: crispEdges;
+  touch-action: none; 
 }
 
 svg {
   vector-effect: non-scaling-stroke;
-  touch-action: none; /* Prevent default touch actions like scrolling */
+  touch-action: none; 
+}
+
+
+.floor-plan-container {
+  touch-action: none;
 }
 
 .room-polygon.selected {
@@ -484,7 +490,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
       lastY: touchY,
       isResizing: false
     });
-
+  
     setHasChanges(true);
     setSelectedRoomId(roomId);
   };
@@ -493,7 +499,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
     event.stopPropagation();
     event.preventDefault();
     
-    if (event.touches.length !== 1) return; // Only handle single touch
+    if (event.touches.length !== 1) return;
     
     const touch = event.touches[0];
     const svgElement = svgRef.current;
@@ -521,6 +527,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
     if (!dragState.active || !dragState.roomId) return;
     
     event.preventDefault(); // Prevent scrolling during drag
+    event.stopPropagation();
     
     if (event.touches.length !== 1) return;
     
@@ -587,6 +594,20 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
       lastY: touchY
     }));
   }, [dragState, reverseTransformCoordinates, scale]);
+
+  useEffect(() => {
+    const preventDefaultTouchMove = (e: TouchEvent) => {
+      if (dragState.active) {
+        e.preventDefault();
+      }
+    };
+    
+    document.addEventListener('touchmove', preventDefaultTouchMove, { passive: false });
+    
+    return () => {
+      document.removeEventListener('touchmove', preventDefaultTouchMove);
+    };
+  }, [dragState.active]);
 
   const handleTouchEnd = useCallback(() => {
     setDragState({
@@ -757,6 +778,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
 
       <div
         ref={floorPlanRef}
+        className="floor-plan-container"
         style={{
           position: "absolute",
           left: "50%",
