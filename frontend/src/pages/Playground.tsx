@@ -219,7 +219,7 @@ const getDistance = (touches: React.TouchList): number => {
 
       <div className="compass-container">
         <Compass
-          size={window.innerWidth < 768 ? 55 : 64}
+          size={window.innerWidth < 768 ? 64 : 64}
           rotation={rotation}
           onRotate={setRotation}
         />

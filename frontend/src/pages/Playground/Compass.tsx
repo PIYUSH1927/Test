@@ -42,7 +42,7 @@ export const Compass = ({ size, rotation, onRotate }: CompassProps) => {
         className="compass-body"
         style={{
           width: size + size * 3.5,
-          height: size * 1.8,
+          height: size * 1.7,
           transform: `rotate(${rotation}deg)`,
         }}
       >
