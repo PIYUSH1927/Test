@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import ReactDOM from "react-dom";
 
 interface Point {
   x: number;
@@ -33,14 +34,14 @@ interface DragState {
 }
 
 const roomColors: Record<string, string> = {
-  MasterRoom: "#FFD3B6",  
-  LivingRoom: "#FFAAA5",  
-  ChildRoom: "#D5AAFF",   
-  Kitchen: "#FFCC5C",    
-  Bathroom: "#85C1E9",    
-  Balcony: "#B2DFDB",     
-  SecondRoom: "#F6D55C",  
-  DiningRoom: "#A5D6A7",  
+  MasterRoom: "#FFD3B6",
+  LivingRoom: "#FFAAA5",
+  ChildRoom: "#D5AAFF",
+  Kitchen: "#FFCC5C",
+  Bathroom: "#85C1E9",
+  Balcony: "#B2DFDB",
+  SecondRoom: "#F6D55C",
+  DiningRoom: "#A5D6A7",
 };
 
 const styles = `
@@ -67,7 +68,6 @@ svg {
   touch-action: none; 
 }
 
-
 .floor-plan-container {
   touch-action: none;
 }
@@ -76,6 +76,12 @@ svg {
   fill: rgba(224, 224, 255, 0.8);
   stroke: #0000ff;
   stroke-width: 4px; 
+}
+
+.room-polygon.overlapping {
+  stroke: #ff0000;
+  stroke-width: 4px;
+  stroke-dasharray: 5,5;
 }
 
 .resize-handle {
@@ -143,6 +149,22 @@ button:hover {
   background-color: #45a049;
 }
 
+.overlap-alert {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background-color: rgba(244, 67, 54, 0.8); 
+  color: white;
+  padding: 10px 15px;
+  text-align: center;
+  font-weight: bold;
+  z-index: 9999;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+  
+
 @media (max-width: 786px) {
   .room-label {
     font-size: 8px !important;
@@ -154,13 +176,34 @@ button:hover {
 }
 `;
 
-export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: number }) {
+const useInterval = (callback: () => void, delay: number | null) => {
+  const savedCallback = useRef<() => void | undefined>(callback);
 
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
+
+  useEffect(() => {
+    function tick() {
+      savedCallback.current?.();
+    }
+    if (delay !== null) {
+      const id = setInterval(tick, delay);
+      return () => clearInterval(id);
+    }
+  }, [delay]);
+};
+
+export default function InteractiveFloorPlan({
+  rotation = 0,
+}: {
+  rotation?: number;
+}) {
   const [hasChanges, setHasChanges] = useState(false);
   const [floorPlanData, setFloorPlanData] = useState<FloorPlanData>({
     room_count: 8,
     total_area: 62.57,
-    "room_types": [
+    room_types: [
       "SecondRoom",
       "MasterRoom",
       "Bathroom",
@@ -168,7 +211,7 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
       "Balcony",
       "Kitchen",
       "Balcony",
-      "Balcony"
+      "Balcony",
     ],
     rooms: [
       {
@@ -288,10 +331,12 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
   const twidth = 10;
 
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  const [scale, setScale] = useState(window.innerWidth < 786 ? 2.1 : 3.5);
+  const [scale, setScale] = useState(window.innerWidth < 786 ? 2.1 : 3.3);
   const floorPlanRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  
+
+  const [overlappingRooms, setOverlappingRooms] = useState<string[][]>([]);
+
   const [dragState, setDragState] = useState<DragState>({
     active: false,
     roomId: null,
@@ -300,8 +345,27 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
     startY: 0,
     lastX: 0,
     lastY: 0,
-    isResizing: false
+    isResizing: false,
   });
+
+  useEffect(() => {
+    checkAndUpdateOverlaps();
+  }, []);
+
+  useInterval(() => {
+    checkAndUpdateOverlaps();
+  }, 500);
+
+  const renderOverlapAlert = () => {
+    if (overlappingRooms.length === 0) return null;
+
+    return ReactDOM.createPortal(
+      <div className="overlap-alert">
+        Room overlap detected between {getOverlappingRoomNames()}
+      </div>,
+      document.body
+    );
+  };
 
   const calculateBounds = () => {
     const allPoints = floorPlanData.rooms.flatMap((room) => room.floor_polygon);
@@ -352,19 +416,25 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
   const contentHeight = bounds.maxZ - bounds.minZ + 2 * padding;
   const isMobile = window.innerWidth < 786;
 
-  const transformCoordinates = useCallback((point: Point) => {
-    return {
-      x: (point.x - bounds.minX + padding) * scale,
-      y: (point.z - bounds.minZ + padding) * scale,
-    };
-  }, [bounds.minX, bounds.minZ, padding, scale]);
+  const transformCoordinates = useCallback(
+    (point: Point) => {
+      return {
+        x: (point.x - bounds.minX + padding) * scale,
+        y: (point.z - bounds.minZ + padding) * scale,
+      };
+    },
+    [bounds.minX, bounds.minZ, padding, scale]
+  );
 
-  const reverseTransformCoordinates = useCallback((x: number, y: number) => {
-    return {
-      x: x / scale + bounds.minX - padding,
-      z: y / scale + bounds.minZ - padding,
-    };
-  }, [bounds.minX, bounds.minZ, padding, scale]);
+  const reverseTransformCoordinates = useCallback(
+    (x: number, y: number) => {
+      return {
+        x: x / scale + bounds.minX - padding,
+        z: y / scale + bounds.minZ - padding,
+      };
+    },
+    [bounds.minX, bounds.minZ, padding, scale]
+  );
 
   const calculateRoomCentroid = (points: { x: number; y: number }[]) => {
     if (points.length === 0) return { x: 0, y: 0 };
@@ -385,38 +455,47 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
 
   const calculateRoomArea = (polygon: Point[]) => {
     if (polygon.length < 3) return 0;
-    
+
     let area = 0;
     for (let i = 0; i < polygon.length; i++) {
       const j = (i + 1) % polygon.length;
       area += polygon[i].x * polygon[j].z;
       area -= polygon[j].x * polygon[i].z;
     }
-    
+
     area = Math.abs(area) / 2;
-    return area / 100; 
+    return area / 100;
   };
 
   const calculateRoomDimensions = (polygon: Point[]) => {
     if (polygon.length < 3) return { width: 0, height: 0 };
-    
-    const xCoords = polygon.map(p => p.x);
-    const zCoords = polygon.map(p => p.z);
-    
+
+    const xCoords = polygon.map((p) => p.x);
+    const zCoords = polygon.map((p) => p.z);
+
     const minX = Math.min(...xCoords);
     const maxX = Math.max(...xCoords);
     const minZ = Math.min(...zCoords);
     const maxZ = Math.max(...zCoords);
-    
+
     return {
-      width: (maxX - minX) / 10, 
-      height: (maxZ - minZ) / 10, 
+      width: (maxX - minX) / 10,
+      height: (maxZ - minZ) / 10,
     };
   };
 
-  const handleRoomClick = (roomId: string, event: React.MouseEvent | React.TouchEvent) => {
+  const checkAndUpdateOverlaps = () => {
+    const overlaps = checkRoomOverlap();
+    setOverlappingRooms(overlaps);
+    return overlaps.length > 0;
+  };
+
+  const handleRoomClick = (
+    roomId: string,
+    event: React.MouseEvent | React.TouchEvent
+  ) => {
     event.stopPropagation();
-    
+
     if (roomId !== selectedRoomId) {
       setSelectedRoomId(roomId);
     }
@@ -425,16 +504,16 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
   const handleMouseDown = (event: React.MouseEvent, roomId: string) => {
     event.stopPropagation();
     event.preventDefault();
-    
-    if (event.button !== 0) return; 
-    
+
+    if (event.button !== 0) return;
+
     const svgElement = svgRef.current;
     if (!svgElement) return;
-    
+
     const svgRect = svgElement.getBoundingClientRect();
     const mouseX = event.clientX - svgRect.left;
     const mouseY = event.clientY - svgRect.top;
-    
+
     setDragState({
       active: true,
       roomId,
@@ -443,24 +522,28 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
       startY: mouseY,
       lastX: mouseX,
       lastY: mouseY,
-      isResizing: false
+      isResizing: false,
     });
 
     setHasChanges(true);
     setSelectedRoomId(roomId);
   };
 
-  const handleVertexMouseDown = (event: React.MouseEvent, roomId: string, vertexIndex: number) => {
+  const handleVertexMouseDown = (
+    event: React.MouseEvent,
+    roomId: string,
+    vertexIndex: number
+  ) => {
     event.stopPropagation();
     event.preventDefault();
-    
+
     const svgElement = svgRef.current;
     if (!svgElement) return;
-    
+
     const svgRect = svgElement.getBoundingClientRect();
     const mouseX = event.clientX - svgRect.left;
     const mouseY = event.clientY - svgRect.top;
-    
+
     setDragState({
       active: true,
       roomId,
@@ -469,9 +552,9 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
       startY: mouseY,
       lastX: mouseX,
       lastY: mouseY,
-      isResizing: true
+      isResizing: true,
     });
-    
+
     setSelectedRoomId(roomId);
 
     setHasChanges(true);
@@ -479,21 +562,21 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
 
   const handleTouchStart = (event: React.TouchEvent, roomId: string) => {
     event.stopPropagation();
-    
-    if (event.touches.length !== 1) return; 
+
+    if (event.touches.length !== 1) return;
 
     event.preventDefault();
 
-    document.body.setAttribute('data-room-touch-interaction', 'true');
-    
+    document.body.setAttribute("data-room-touch-interaction", "true");
+
     const touch = event.touches[0];
     const svgElement = svgRef.current;
     if (!svgElement) return;
-    
+
     const svgRect = svgElement.getBoundingClientRect();
     const touchX = touch.clientX - svgRect.left;
     const touchY = touch.clientY - svgRect.top;
-    
+
     setDragState({
       active: true,
       roomId,
@@ -502,31 +585,34 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
       startY: touchY,
       lastX: touchX,
       lastY: touchY,
-      isResizing: false
+      isResizing: false,
     });
-  
+
     setHasChanges(true);
     setSelectedRoomId(roomId);
   };
 
-  const handleVertexTouchStart = (event: React.TouchEvent, roomId: string, vertexIndex: number) => {
+  const handleVertexTouchStart = (
+    event: React.TouchEvent,
+    roomId: string,
+    vertexIndex: number
+  ) => {
     event.stopPropagation();
 
-    
     if (event.touches.length !== 1) return;
 
     event.preventDefault();
 
-    document.body.setAttribute('data-room-touch-interaction', 'true');
-    
+    document.body.setAttribute("data-room-touch-interaction", "true");
+
     const touch = event.touches[0];
     const svgElement = svgRef.current;
     if (!svgElement) return;
-    
+
     const svgRect = svgElement.getBoundingClientRect();
     const touchX = touch.clientX - svgRect.left;
     const touchY = touch.clientY - svgRect.top;
-    
+
     setDragState({
       active: true,
       roomId,
@@ -535,81 +621,89 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
       startY: touchY,
       lastX: touchX,
       lastY: touchY,
-      isResizing: true
+      isResizing: true,
     });
-    
+
     setSelectedRoomId(roomId);
 
     setHasChanges(true);
   };
 
-  const handleTouchMove = useCallback((event: TouchEvent) => {
-    if (!dragState.active || !dragState.roomId) return;
-    
-    event.preventDefault();
-    event.stopPropagation();
-    
-    if (event.touches.length !== 1) return;
-    
-    const touch = event.touches[0];
-    const svgElement = svgRef.current;
-    if (!svgElement) return;
-    
-    const svgRect = svgElement.getBoundingClientRect();
-    const touchX = touch.clientX - svgRect.left;
-    const touchY = touch.clientY - svgRect.top;
-    
-    const deltaX = touchX - dragState.lastX;
-    const deltaY = touchY - dragState.lastY;
-    
-    setFloorPlanData(prevData => {
-      const updatedRooms = [...prevData.rooms];
-      const roomIndex = updatedRooms.findIndex(room => room.id === dragState.roomId);
-      
-      if (roomIndex === -1) return prevData;
-      
-      const room = {...updatedRooms[roomIndex]};
-      
-      if (dragState.isResizing && dragState.vertexIndex !== null) {
-        const updatedPolygon = [...room.floor_polygon];
-        const point = reverseTransformCoordinates(touchX, touchY);
-        updatedPolygon[dragState.vertexIndex] = point;
-        
-        const dimensions = calculateRoomDimensions(updatedPolygon);
-        const area = calculateRoomArea(updatedPolygon);
-        
-        room.floor_polygon = updatedPolygon;
-        room.width = dimensions.width;
-        room.height = dimensions.height;
-        room.area = area;
-      } else {
-        const updatedPolygon = room.floor_polygon.map(point => {
-          return {
-            x: point.x + deltaX / scale,
-            z: point.z + deltaY / scale
-          };
-        });
-        
-        room.floor_polygon = updatedPolygon;
-      }
-      
-      updatedRooms[roomIndex] = room;
-      
-      const totalArea = updatedRooms.reduce((sum, room) => sum + room.area, 0);
-      
-      return {
-        ...prevData,
-        rooms: updatedRooms,
-        total_area: parseFloat(totalArea.toFixed(2))
-      };
-    });
-    
-    setDragState(prev => ({
-      ...prev,
-      lastX: touchX,
-      lastY: touchY
-    }));
-  }, [dragState, reverseTransformCoordinates, scale]);
+  const handleTouchMove = useCallback(
+    (event: TouchEvent) => {
+      if (!dragState.active || !dragState.roomId) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.touches.length !== 1) return;
+
+      const touch = event.touches[0];
+      const svgElement = svgRef.current;
+      if (!svgElement) return;
+
+      const svgRect = svgElement.getBoundingClientRect();
+      const touchX = touch.clientX - svgRect.left;
+      const touchY = touch.clientY - svgRect.top;
+
+      const deltaX = touchX - dragState.lastX;
+      const deltaY = touchY - dragState.lastY;
+
+      setFloorPlanData((prevData) => {
+        const updatedRooms = [...prevData.rooms];
+        const roomIndex = updatedRooms.findIndex(
+          (room) => room.id === dragState.roomId
+        );
+
+        if (roomIndex === -1) return prevData;
+
+        const room = { ...updatedRooms[roomIndex] };
+
+        if (dragState.isResizing && dragState.vertexIndex !== null) {
+          const updatedPolygon = [...room.floor_polygon];
+          const point = reverseTransformCoordinates(touchX, touchY);
+          updatedPolygon[dragState.vertexIndex] = point;
+
+          const dimensions = calculateRoomDimensions(updatedPolygon);
+          const area = calculateRoomArea(updatedPolygon);
+
+          room.floor_polygon = updatedPolygon;
+          room.width = dimensions.width;
+          room.height = dimensions.height;
+          room.area = area;
+        } else {
+          const updatedPolygon = room.floor_polygon.map((point) => {
+            return {
+              x: point.x + deltaX / scale,
+              z: point.z + deltaY / scale,
+            };
+          });
+
+          room.floor_polygon = updatedPolygon;
+        }
+
+        updatedRooms[roomIndex] = room;
+
+        const totalArea = updatedRooms.reduce(
+          (sum, room) => sum + room.area,
+          0
+        );
+
+        return {
+          ...prevData,
+          rooms: updatedRooms,
+          total_area: parseFloat(totalArea.toFixed(2)),
+        };
+      });
+
+      setDragState((prev) => ({
+        ...prev,
+        lastX: touchX,
+        lastY: touchY,
+      }));
+    },
+    [dragState, reverseTransformCoordinates, scale]
+  );
 
   useEffect(() => {
     const preventDefaultTouchMove = (e: TouchEvent) => {
@@ -617,17 +711,18 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
         e.preventDefault();
       }
     };
-    
-    document.addEventListener('touchmove', preventDefaultTouchMove, { passive: false });
-    
+
+    document.addEventListener("touchmove", preventDefaultTouchMove, {
+      passive: false,
+    });
+
     return () => {
-      document.removeEventListener('touchmove', preventDefaultTouchMove);
+      document.removeEventListener("touchmove", preventDefaultTouchMove);
     };
   }, [dragState.active]);
 
   const handleTouchEnd = useCallback(() => {
-
-    document.body.removeAttribute('data-room-touch-interaction');
+    document.body.removeAttribute("data-room-touch-interaction");
 
     setDragState({
       active: false,
@@ -637,72 +732,81 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
       startY: 0,
       lastX: 0,
       lastY: 0,
-      isResizing: false
+      isResizing: false,
     });
+
+    checkAndUpdateOverlaps();
   }, []);
 
-  const handleMouseMove = useCallback((event: MouseEvent) => {
-    if (!dragState.active || !dragState.roomId) return;
-    
-    const svgElement = svgRef.current;
-    if (!svgElement) return;
-    
-    const svgRect = svgElement.getBoundingClientRect();
-    const mouseX = event.clientX - svgRect.left;
-    const mouseY = event.clientY - svgRect.top;
-    
-    const deltaX = mouseX - dragState.lastX;
-    const deltaY = mouseY - dragState.lastY;
-    
-    setFloorPlanData(prevData => {
-      const updatedRooms = [...prevData.rooms];
-      const roomIndex = updatedRooms.findIndex(room => room.id === dragState.roomId);
-      
-      if (roomIndex === -1) return prevData;
-      
-      const room = {...updatedRooms[roomIndex]};
-      
-      if (dragState.isResizing && dragState.vertexIndex !== null) {
+  const handleMouseMove = useCallback(
+    (event: MouseEvent) => {
+      if (!dragState.active || !dragState.roomId) return;
 
-        const updatedPolygon = [...room.floor_polygon];
-        const point = reverseTransformCoordinates(mouseX, mouseY);
-        updatedPolygon[dragState.vertexIndex] = point;
-        
-        const dimensions = calculateRoomDimensions(updatedPolygon);
-        const area = calculateRoomArea(updatedPolygon);
-        
-        room.floor_polygon = updatedPolygon;
-        room.width = dimensions.width;
-        room.height = dimensions.height;
-        room.area = area;
-      } else {
-        const updatedPolygon = room.floor_polygon.map(point => {
-          return {
-            x: point.x + deltaX / scale,
-            z: point.z + deltaY / scale
-          };
-        });
-        
-        room.floor_polygon = updatedPolygon;
-      }
-      
-      updatedRooms[roomIndex] = room;
-      
-      const totalArea = updatedRooms.reduce((sum, room) => sum + room.area, 0);
-      
-      return {
-        ...prevData,
-        rooms: updatedRooms,
-        total_area: parseFloat(totalArea.toFixed(2))
-      };
-    });
-    
-    setDragState(prev => ({
-      ...prev,
-      lastX: mouseX,
-      lastY: mouseY
-    }));
-  }, [dragState, reverseTransformCoordinates, scale]);
+      const svgElement = svgRef.current;
+      if (!svgElement) return;
+
+      const svgRect = svgElement.getBoundingClientRect();
+      const mouseX = event.clientX - svgRect.left;
+      const mouseY = event.clientY - svgRect.top;
+
+      const deltaX = mouseX - dragState.lastX;
+      const deltaY = mouseY - dragState.lastY;
+
+      setFloorPlanData((prevData) => {
+        const updatedRooms = [...prevData.rooms];
+        const roomIndex = updatedRooms.findIndex(
+          (room) => room.id === dragState.roomId
+        );
+
+        if (roomIndex === -1) return prevData;
+
+        const room = { ...updatedRooms[roomIndex] };
+
+        if (dragState.isResizing && dragState.vertexIndex !== null) {
+          const updatedPolygon = [...room.floor_polygon];
+          const point = reverseTransformCoordinates(mouseX, mouseY);
+          updatedPolygon[dragState.vertexIndex] = point;
+
+          const dimensions = calculateRoomDimensions(updatedPolygon);
+          const area = calculateRoomArea(updatedPolygon);
+
+          room.floor_polygon = updatedPolygon;
+          room.width = dimensions.width;
+          room.height = dimensions.height;
+          room.area = area;
+        } else {
+          const updatedPolygon = room.floor_polygon.map((point) => {
+            return {
+              x: point.x + deltaX / scale,
+              z: point.z + deltaY / scale,
+            };
+          });
+
+          room.floor_polygon = updatedPolygon;
+        }
+
+        updatedRooms[roomIndex] = room;
+
+        const totalArea = updatedRooms.reduce(
+          (sum, room) => sum + room.area,
+          0
+        );
+
+        return {
+          ...prevData,
+          rooms: updatedRooms,
+          total_area: parseFloat(totalArea.toFixed(2)),
+        };
+      });
+
+      setDragState((prev) => ({
+        ...prev,
+        lastX: mouseX,
+        lastY: mouseY,
+      }));
+    },
+    [dragState, reverseTransformCoordinates, scale]
+  );
 
   const handleMouseUp = useCallback(() => {
     setDragState({
@@ -713,280 +817,414 @@ export default function InteractiveFloorPlan({ rotation = 0 }: { rotation?: numb
       startY: 0,
       lastX: 0,
       lastY: 0,
-      isResizing: false
+      isResizing: false,
     });
+
+    checkAndUpdateOverlaps();
   }, []);
 
   useEffect(() => {
     if (dragState.active) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
 
-      document.addEventListener('touchmove', handleTouchMove, { passive: false });
-      document.addEventListener('touchend', handleTouchEnd);
-      document.addEventListener('touchcancel', handleTouchEnd);
+      document.addEventListener("touchmove", handleTouchMove, {
+        passive: false,
+      });
+      document.addEventListener("touchend", handleTouchEnd);
+      document.addEventListener("touchcancel", handleTouchEnd);
 
       return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.removeEventListener('touchmove', handleTouchMove);
-        document.removeEventListener('touchend', handleTouchEnd);
-        document.removeEventListener('touchcancel', handleTouchEnd);
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.removeEventListener("touchmove", handleTouchMove);
+        document.removeEventListener("touchend", handleTouchEnd);
+        document.removeEventListener("touchcancel", handleTouchEnd);
       };
     }
-  }, [dragState.active, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
+  }, [
+    dragState.active,
+    handleMouseMove,
+    handleMouseUp,
+    handleTouchMove,
+    handleTouchEnd,
+  ]);
 
   const checkRoomOverlap = () => {
-    const overlaps = [];
-    
+    const overlaps: string[][] = [];
+
+    const isPointInPolygon = (point: Point, polygon: Point[]) => {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i].x,
+          yi = polygon[i].z;
+        const xj = polygon[j].x,
+          yj = polygon[j].z;
+
+        const intersect =
+          yi > point.z !== yj > point.z &&
+          point.x < ((xj - xi) * (point.z - yi)) / (yj - yi) + xi;
+
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    };
+
+    const doLineSegmentsIntersect = (
+      p1: Point,
+      p2: Point,
+      p3: Point,
+      p4: Point
+    ) => {
+      const d1x = p2.x - p1.x;
+      const d1z = p2.z - p1.z;
+      const d2x = p4.x - p3.x;
+      const d2z = p4.z - p3.z;
+      const det = d1x * d2z - d1z * d2x;
+
+      if (det === 0) return false;
+
+      const dx = p3.x - p1.x;
+      const dz = p3.z - p1.z;
+
+      const t1 = (dx * d2z - dz * d2x) / det;
+      const t2 = (dx * d1z - dz * d1x) / det;
+
+      return t1 >= 0 && t1 <= 1 && t2 >= 0 && t2 <= 1;
+    };
+
+    const doPolygonsIntersect = (poly1: Point[], poly2: Point[]) => {
+      for (let i = 0; i < poly1.length; i++) {
+        const i2 = (i + 1) % poly1.length;
+
+        for (let j = 0; j < poly2.length; j++) {
+          const j2 = (j + 1) % poly2.length;
+
+          if (
+            doLineSegmentsIntersect(poly1[i], poly1[i2], poly2[j], poly2[j2])
+          ) {
+            return true;
+          }
+        }
+      }
+
+      if (
+        isPointInPolygon(poly1[0], poly2) ||
+        isPointInPolygon(poly2[0], poly1)
+      ) {
+        return true;
+      }
+
+      return false;
+    };
+
     for (let i = 0; i < floorPlanData.rooms.length; i++) {
       for (let j = i + 1; j < floorPlanData.rooms.length; j++) {
-
         const room1 = floorPlanData.rooms[i];
         const room2 = floorPlanData.rooms[j];
-        
-        const xCoords1 = room1.floor_polygon.map(p => p.x);
-        const zCoords1 = room1.floor_polygon.map(p => p.z);
+
+        const xCoords1 = room1.floor_polygon.map((p) => p.x);
+        const zCoords1 = room1.floor_polygon.map((p) => p.z);
         const minX1 = Math.min(...xCoords1);
         const maxX1 = Math.max(...xCoords1);
         const minZ1 = Math.min(...zCoords1);
         const maxZ1 = Math.max(...zCoords1);
-        
-        const xCoords2 = room2.floor_polygon.map(p => p.x);
-        const zCoords2 = room2.floor_polygon.map(p => p.z);
+
+        const xCoords2 = room2.floor_polygon.map((p) => p.x);
+        const zCoords2 = room2.floor_polygon.map((p) => p.z);
         const minX2 = Math.min(...xCoords2);
         const maxX2 = Math.max(...xCoords2);
         const minZ2 = Math.min(...zCoords2);
         const maxZ2 = Math.max(...zCoords2);
-        
-        const overlap = !(
-          maxX1 < minX2 || 
-          minX1 > maxX2 || 
-          maxZ1 < minZ2 || 
-          minZ1 > maxZ2
+
+        const boxesOverlap = !(
+          maxX1 <= minX2 ||
+          minX1 >= maxX2 ||
+          maxZ1 <= minZ2 ||
+          minZ1 >= maxZ2
         );
-        
-        if (overlap) {
+
+        if (!boxesOverlap) continue;
+
+        if (doPolygonsIntersect(room1.floor_polygon, room2.floor_polygon)) {
           overlaps.push([room1.id, room2.id]);
         }
       }
     }
-    
+
     return overlaps;
   };
 
   const saveFloorPlan = () => {
-    console.log('Floor plan data:', JSON.stringify(floorPlanData));
-    alert('Floor plan saved! Check console for data.');
-    setHasChanges(false); 
+    console.log("Floor plan data:", JSON.stringify(floorPlanData));
+    alert("Floor plan saved! Check console for data.");
+    setHasChanges(false);
+  };
+
+  const getOverlappingRoomNames = () => {
+    const roomNamePairs = overlappingRooms.map(([id1, id2]) => {
+      const room1 = floorPlanData.rooms.find((r) => r.id === id1);
+      const room2 = floorPlanData.rooms.find((r) => r.id === id2);
+      return `${room1?.room_type} and ${room2?.room_type}`;
+    });
+
+    if (roomNamePairs.length === 1) {
+      return roomNamePairs[0];
+    } else if (roomNamePairs.length === 2) {
+      return `${roomNamePairs[0]}, ${roomNamePairs[1]}`;
+    } else if (roomNamePairs.length > 2) {
+      return `${roomNamePairs.slice(0, 2).join(", ")} and ${
+        roomNamePairs.length - 2
+      } more`;
+    }
+    return "";
+  };
+
+  const isRoomOverlapping = (roomId: string) => {
+    return overlappingRooms.some((pair) => pair.includes(roomId));
   };
 
   return (
     <div>
-      <style>{styles}</style>
+      {renderOverlapAlert()}
 
-      <div
-        ref={floorPlanRef}
-        className="floor-plan-container"
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          transform: isMobile ? "translate(-40%, -46%)" : "translate(-30%, -49%)",
-          width: `${contentWidth * scale}px`,
-          height: `${contentHeight * scale}px`,
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      <div>
+        <style>{styles}</style>
 
-        <p style={{textAlign:"center", marginBottom:"-35px"}}>
-          <b>Total Area:</b> {floorPlanData.total_area.toFixed(2)} m² &nbsp;|&nbsp;{" "}
-          <b>Total Rooms:</b> {floorPlanData.room_count}
-        </p>
-
-        <svg 
-          width="100%" 
-          height="100%" 
-          ref={svgRef}
-          style={{ touchAction: "none" }} 
+        <div
+          ref={floorPlanRef}
+          className="floor-plan-container"
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: isMobile
+              ? "translate(-40%, -46%)"
+              : "translate(-30%, -49%)",
+            width: `${contentWidth * scale}px`,
+            height: `${contentHeight * scale}px`,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
         >
-          <defs>
-            <marker
-              id="arrow"
-              markerWidth="10"
-              markerHeight="10"
-              refX="5"
-              refY="5"
-              orient="auto"
-              markerUnits="strokeWidth"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 Z" fill="black" />
-            </marker>
+          <p style={{ textAlign: "center", marginBottom: "-45px" }}>
+            <b>Total Area:</b> {floorPlanData.total_area.toFixed(2)} m²
+            &nbsp;|&nbsp; <b>Total Rooms:</b> {floorPlanData.room_count}
+          </p>
 
-            <marker
-              id="arrow1"
-              markerWidth="10"
-              markerHeight="10"
-              refX="5"
-              refY="5"
-              orient="auto"
-              markerUnits="strokeWidth"
-            >
-              <path d="M 10 0 L 0 5 L 10 10 Z" fill="black" />
-            </marker>
-          </defs>
-
-          <line
-            x1={transformCoordinates({ x: bounds.minX - 10, z: bounds.minZ }).x + 10}
-            y1={transformCoordinates({ x: bounds.minX, z: bounds.minZ }).y + 10}
-            x2={transformCoordinates({ x: bounds.minX - 10, z: bounds.maxZ }).x + 10}
-            y2={transformCoordinates({ x: bounds.minX, z: bounds.maxZ }).y + 10}
-            stroke="black"
-            strokeWidth="1"
-            markerStart="url(#arrow1)"
-            markerEnd="url(#arrow)"
-          />
-          <text
-            x={
-              transformCoordinates({
-                x: bounds.minX - 14,
-                z: (bounds.minZ + bounds.maxZ) / 2,
-              }).x
-            }
-            y={
-              transformCoordinates({
-                x: bounds.minX,
-                z: (bounds.minZ + bounds.maxZ) / 2,
-              }).y
-            }
-            fontSize="11"
-            fill="black"
-            textAnchor="middle"
+          <svg
+            width="100%"
+            height="100%"
+            ref={svgRef}
+            style={{ touchAction: "none" }}
           >
-            {tlength} m
-          </text>
+            <defs>
+              <marker
+                id="arrow"
+                markerWidth="10"
+                markerHeight="10"
+                refX="5"
+                refY="5"
+                orient="auto"
+                markerUnits="strokeWidth"
+              >
+                <path d="M 0 0 L 10 5 L 0 10 Z" fill="black" />
+              </marker>
 
-          <line
-            x1={transformCoordinates({ x: bounds.minX, z: bounds.maxZ + 10 }).x}
-            y1={transformCoordinates({ x: bounds.minX, z: bounds.maxZ + 10 }).y}
-            x2={transformCoordinates({ x: bounds.maxX, z: bounds.maxZ + 10 }).x}
-            y2={transformCoordinates({ x: bounds.maxX, z: bounds.maxZ + 10 }).y}
-            stroke="black"
-            strokeWidth="1"
-            markerStart="url(#arrow1)"
-            markerEnd="url(#arrow)"
-          />
-          <text
-            x={
-              transformCoordinates({
-                x: (bounds.minX + bounds.maxX) / 2,
-                z: bounds.maxZ + 20,
-              }).x
-            }
-            y={
-              transformCoordinates({
-                x: (bounds.minX + bounds.maxX) / 2,
-                z: bounds.maxZ + 14,
-              }).y
-            }
-            fontSize="11"
-            fill="black"
-            textAnchor="middle"
-          >
-            {twidth} m
-          </text>
+              <marker
+                id="arrow1"
+                markerWidth="10"
+                markerHeight="10"
+                refX="5"
+                refY="5"
+                orient="auto"
+                markerUnits="strokeWidth"
+              >
+                <path d="M 10 0 L 0 5 L 10 10 Z" fill="black" />
+              </marker>
+            </defs>
 
-          {floorPlanData.rooms.map((room) => {
-            const transformedPoints =
-              room.floor_polygon.map(transformCoordinates);
+            <line
+              x1={
+                transformCoordinates({ x: bounds.minX - 10, z: bounds.minZ })
+                  .x + 10
+              }
+              y1={
+                transformCoordinates({ x: bounds.minX, z: bounds.minZ }).y + 10
+              }
+              x2={
+                transformCoordinates({ x: bounds.minX - 10, z: bounds.maxZ })
+                  .x + 10
+              }
+              y2={
+                transformCoordinates({ x: bounds.minX, z: bounds.maxZ }).y + 10
+              }
+              stroke="black"
+              strokeWidth="1"
+              markerStart="url(#arrow1)"
+              markerEnd="url(#arrow)"
+            />
+            <text
+              x={
+                transformCoordinates({
+                  x: bounds.minX - 14,
+                  z: (bounds.minZ + bounds.maxZ) / 2,
+                }).x
+              }
+              y={
+                transformCoordinates({
+                  x: bounds.minX,
+                  z: (bounds.minZ + bounds.maxZ) / 2,
+                }).y
+              }
+              fontSize="11"
+              fill="black"
+              textAnchor="middle"
+            >
+              {tlength} m
+            </text>
 
-            const polygonPoints = transformedPoints
-              .map((p) => `${p.x},${p.y}`)
-              .join(" ");
+            <line
+              x1={
+                transformCoordinates({ x: bounds.minX, z: bounds.maxZ + 10 }).x
+              }
+              y1={
+                transformCoordinates({ x: bounds.minX, z: bounds.maxZ + 10 }).y
+              }
+              x2={
+                transformCoordinates({ x: bounds.maxX, z: bounds.maxZ + 10 }).x
+              }
+              y2={
+                transformCoordinates({ x: bounds.maxX, z: bounds.maxZ + 10 }).y
+              }
+              stroke="black"
+              strokeWidth="1"
+              markerStart="url(#arrow1)"
+              markerEnd="url(#arrow)"
+            />
+            <text
+              x={
+                transformCoordinates({
+                  x: (bounds.minX + bounds.maxX) / 2,
+                  z: bounds.maxZ + 20,
+                }).x
+              }
+              y={
+                transformCoordinates({
+                  x: (bounds.minX + bounds.maxX) / 2,
+                  z: bounds.maxZ + 14,
+                }).y
+              }
+              fontSize="11"
+              fill="black"
+              textAnchor="middle"
+            >
+              {twidth} m
+            </text>
 
-            const centroid = calculateRoomCentroid(transformedPoints);
+            {floorPlanData.rooms.map((room) => {
+              const transformedPoints =
+                room.floor_polygon.map(transformCoordinates);
 
-            return (
-              <g key={room.id}>
-                <polygon
-                  id={room.id}
-                  className={`room-polygon ${
-                    selectedRoomId === room.id ? "selected" : ""
-                  }`}
-                  points={polygonPoints}
-                  fill={roomColors[room.room_type as keyof typeof roomColors] || "#E8E8E8"}
-                  onClick={(e) => handleRoomClick(room.id, e)}
-                  onMouseDown={(e) => handleMouseDown(e, room.id)}
-                  onTouchStart={(e) => handleTouchStart(e, room.id)}
-                />
-                
-                {selectedRoomId === room.id && transformedPoints.map((point, index) => (
-                  <circle
-                    key={`handle-${room.id}-${index}`}
-                    cx={point.x}
-                    cy={point.y}
-                    r={6}
-                    className="resize-handle"
-                    onMouseDown={(e) => handleVertexMouseDown(e, room.id, index)}
-                    onTouchStart={(e) => handleVertexTouchStart(e, room.id, index)}
+              const polygonPoints = transformedPoints
+                .map((p) => `${p.x},${p.y}`)
+                .join(" ");
+
+              const centroid = calculateRoomCentroid(transformedPoints);
+
+              const isOverlapping = isRoomOverlapping(room.id);
+
+              return (
+                <g key={room.id}>
+                  <polygon
+                    id={room.id}
+                    className={`room-polygon ${
+                      selectedRoomId === room.id ? "selected" : ""
+                    } ${isOverlapping ? "overlapping" : ""}`}
+                    points={polygonPoints}
+                    fill={
+                      roomColors[room.room_type as keyof typeof roomColors] ||
+                      "#E8E8E8"
+                    }
+                    onClick={(e) => handleRoomClick(room.id, e)}
+                    onMouseDown={(e) => handleMouseDown(e, room.id)}
+                    onTouchStart={(e) => handleTouchStart(e, room.id)}
                   />
-                ))}
 
-                <text
-                  className="room-label room-name"
-                  x={centroid.x}
-                  y={centroid.y - 3}
-                  pointerEvents="none"
-                >
-                  {room.room_type}
-                </text>
+                  {selectedRoomId === room.id &&
+                    transformedPoints.map((point, index) => (
+                      <circle
+                        key={`handle-${room.id}-${index}`}
+                        cx={point.x}
+                        cy={point.y}
+                        r={6}
+                        className="resize-handle"
+                        onMouseDown={(e) =>
+                          handleVertexMouseDown(e, room.id, index)
+                        }
+                        onTouchStart={(e) =>
+                          handleVertexTouchStart(e, room.id, index)
+                        }
+                      />
+                    ))}
 
-                {room.area < 5 ? (
-                  <>
+                  <text
+                    className="room-label room-name"
+                    x={centroid.x}
+                    y={centroid.y - 3}
+                    pointerEvents="none"
+                  >
+                    {room.room_type}
+                  </text>
+
+                  {room.area < 5 ? (
+                    <>
+                      <text
+                        className="room-label"
+                        x={centroid.x}
+                        y={centroid.y + 10}
+                        pointerEvents="none"
+                      >
+                        {room.width.toFixed(1)}' × {room.height.toFixed(1)}'
+                      </text>
+                      <text
+                        className="room-label"
+                        x={centroid.x}
+                        y={centroid.y + 20}
+                        pointerEvents="none"
+                      >
+                        ({room.area.toFixed(2)} m²)
+                      </text>
+                    </>
+                  ) : (
                     <text
                       className="room-label"
                       x={centroid.x}
                       y={centroid.y + 10}
                       pointerEvents="none"
                     >
-                      {room.width.toFixed(1)}' × {room.height.toFixed(1)}'
+                      {room.width.toFixed(1)}' × {room.height.toFixed(1)}' (
+                      {room.area.toFixed(2)} m²)
                     </text>
-                    <text
-                      className="room-label"
-                      x={centroid.x}
-                      y={centroid.y + 20}
-                      pointerEvents="none"
-                    >
-                      ({room.area.toFixed(2)} m²)
-                    </text>
-                  </>
-                ) : (
-                  <text
-                    className="room-label"
-                    x={centroid.x}
-                    y={centroid.y + 10}
-                    pointerEvents="none"
-                  >
-                    {room.width.toFixed(1)}' × {room.height.toFixed(1)}' (
-                    {room.area.toFixed(2)} m²)
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
-        {hasChanges && (
-        <div style={{ 
-          position: 'absolute', 
-          bottom: '-20px', 
-          left: '50%', 
-          transform: 'translateX(-50%)',
-          marginTop: '20px' 
-        }}>
-          <button onClick={saveFloorPlan}>Save Floor Plan</button>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+          {hasChanges && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: "-20px",
+                left: "50%",
+                transform: "translateX(-50%)",
+                marginTop: "20px",
+              }}
+            >
+              <button onClick={saveFloorPlan}>Save Floor Plan</button>
+            </div>
+          )}
         </div>
-      )}
       </div>
     </div>
   );
