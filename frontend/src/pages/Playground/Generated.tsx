@@ -849,7 +849,7 @@ export default function InteractiveFloorPlan({
   useEffect(() => {
     const updateLeft = () => {
       if (window.innerWidth > 850) {
-        setLeftPosition("24%");
+        setLeftPosition("23%");
       } else {
         setLeftPosition("10%");
       }
@@ -1262,8 +1262,11 @@ export default function InteractiveFloorPlan({
                 position: "fixed",
                 display: "flex",
                 gap: "10px",
-                width:"100%", 
+                width:"80%", 
+                bottom:"80",
+              
                 left: leftPosition,
+                pointerEvents:"auto"
               }}
             >
               <button className="save-button" onClick={saveFloorPlan}>Save Floor Plan</button>

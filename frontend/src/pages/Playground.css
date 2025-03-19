@@ -35,13 +35,16 @@ html, body {
   z-index: 10; 
 }
 
-  .compass-container {
-    position: fixed;
-    bottom: 30px;
-    right: 20px;
-    z-index: 1000;
-    pointer-events: auto; 
-  }
+.compass-container {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  z-index: 1000 !important; 
+  pointer-events: auto;
+  transform: none !important; 
+  will-change: transform; 
+}
+
   
   .playground-container {
     position: absolute;
