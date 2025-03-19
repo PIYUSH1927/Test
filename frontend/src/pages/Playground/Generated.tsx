@@ -138,15 +138,34 @@ svg {
 
 button {
   padding: 8px 16px;
-  background-color: #4CAF50;
-  color: white;
+  margin: 0 5px;
   border: none;
   border-radius: 4px;
   cursor: pointer;
 }
 
-button:hover {
+.save-button {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.save-button:hover {
   background-color: #45a049;
+}
+
+.undo-button {
+  background-color: #f44336;
+  color: white;
+}
+
+.undo-button:hover {
+  background-color: #d32f2f;
+}
+
+.buttons-container {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
 }
 
 .overlap-alert {
@@ -199,8 +218,7 @@ export default function InteractiveFloorPlan({
 }: {
   rotation?: number;
 }) {
-  const [hasChanges, setHasChanges] = useState(false);
-  const [floorPlanData, setFloorPlanData] = useState<FloorPlanData>({
+  const initialFloorPlanData: FloorPlanData = {
     room_count: 8,
     total_area: 62.57,
     room_types: [
@@ -325,7 +343,10 @@ export default function InteractiveFloorPlan({
         ],
       },
     ],
-  });
+  };
+
+  const [hasChanges, setHasChanges] = useState(false);
+  const [floorPlanData, setFloorPlanData] = useState<FloorPlanData>(initialFloorPlanData);
 
   const tlength = 15;
   const twidth = 10;
@@ -961,6 +982,12 @@ export default function InteractiveFloorPlan({
     setHasChanges(false);
   };
 
+  const undoChanges = () => {
+    setFloorPlanData(initialFloorPlanData);
+    setSelectedRoomId(null);
+    setHasChanges(false);
+  };
+
   const getOverlappingRoomNames = () => {
     const roomNamePairs = overlappingRooms.map(([id1, id2]) => {
       const room1 = floorPlanData.rooms.find((r) => r.id === id1);
@@ -1007,7 +1034,7 @@ export default function InteractiveFloorPlan({
             alignItems: "center",
           }}
         >
-          <p style={{ textAlign: "center", marginBottom: "-45px" }}>
+          <p style={{ textAlign: "center", marginBottom: "-30px" }}>
             <b>Total Area:</b> {floorPlanData.total_area.toFixed(2)} m²
             &nbsp;|&nbsp; <b>Total Rooms:</b> {floorPlanData.room_count}
           </p>
@@ -1215,13 +1242,17 @@ export default function InteractiveFloorPlan({
             <div
               style={{
                 position: "absolute",
-                bottom: "-20px",
-                left: "50%",
+                bottom: "-30px",
+                left: "74%",
                 transform: "translateX(-50%)",
                 marginTop: "20px",
+                display: "flex",
+                gap: "10px",
+                width:"100%"
               }}
             >
-              <button onClick={saveFloorPlan}>Save Floor Plan</button>
+              <button className="save-button" onClick={saveFloorPlan}>Save Floor Plan</button>
+              <button className="undo-button" onClick={undoChanges}>Undo Changes</button>
             </div>
           )}
         </div>
