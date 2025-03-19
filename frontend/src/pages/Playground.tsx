@@ -207,7 +207,7 @@ const getDistance = (touches: React.TouchList): number => {
 <div
   style={{
     position: "absolute",
-    top: "48%",
+    top: "46%",
     left: "43%",
     transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
     transformOrigin: "center",
@@ -219,7 +219,7 @@ const getDistance = (touches: React.TouchList): number => {
 
       <div className="compass-container">
         <Compass
-          size={window.innerWidth < 768 ? 64 : 64}
+          size={window.innerWidth < 768 ? 60 : 60}
           rotation={rotation}
           onRotate={setRotation}
         />

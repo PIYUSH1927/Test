@@ -147,6 +147,7 @@ button {
 .save-button {
   background-color: #4CAF50;
   color: white;
+
 }
 
 .save-button:hover {
@@ -184,7 +185,7 @@ button {
 }
   
 
-@media (max-width: 786px) {
+@media (max-width: 850px) {
   .room-label {
     font-size: 8px !important;
   }
@@ -346,13 +347,14 @@ export default function InteractiveFloorPlan({
   };
 
   const [hasChanges, setHasChanges] = useState(false);
+  const [leftPosition, setLeftPosition] = useState("10%");
   const [floorPlanData, setFloorPlanData] = useState<FloorPlanData>(initialFloorPlanData);
 
   const tlength = 15;
   const twidth = 10;
 
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  const [scale, setScale] = useState(window.innerWidth < 786 ? 2.1 : 3.3);
+  const [scale, setScale] = useState(window.innerWidth < 850 ? 2.1 : 3.2);
   const floorPlanRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -400,7 +402,7 @@ export default function InteractiveFloorPlan({
 
   useEffect(() => {
     const handleResize = () => {
-      setScale(window.innerWidth < 786 ? 2 : 3.5);
+      setScale(window.innerWidth < 850 ? 2 : 3.5);
     };
 
     window.addEventListener("resize", handleResize);
@@ -435,7 +437,7 @@ export default function InteractiveFloorPlan({
   const padding = 20;
   const contentWidth = bounds.maxX - bounds.minX + 2 * padding;
   const contentHeight = bounds.maxZ - bounds.minZ + 2 * padding;
-  const isMobile = window.innerWidth < 786;
+  const isMobile = window.innerWidth < 850;
 
   const transformCoordinates = useCallback(
     (point: Point) => {
@@ -845,6 +847,22 @@ export default function InteractiveFloorPlan({
   }, []);
 
   useEffect(() => {
+    const updateLeft = () => {
+      if (window.innerWidth > 850) {
+        setLeftPosition("24%");
+      } else {
+        setLeftPosition("10%");
+      }
+    };
+
+    updateLeft();
+    window.addEventListener("resize", updateLeft);
+
+    return () => window.removeEventListener("resize", updateLeft);
+  }, []);
+
+
+  useEffect(() => {
     if (dragState.active) {
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
@@ -1113,16 +1131,16 @@ export default function InteractiveFloorPlan({
 
             <line
               x1={
-                transformCoordinates({ x: bounds.minX, z: bounds.maxZ + 10 }).x
+                transformCoordinates({ x: bounds.minX, z: bounds.maxZ + 8 }).x
               }
               y1={
-                transformCoordinates({ x: bounds.minX, z: bounds.maxZ + 10 }).y
+                transformCoordinates({ x: bounds.minX, z: bounds.maxZ + 8 }).y
               }
               x2={
-                transformCoordinates({ x: bounds.maxX, z: bounds.maxZ + 10 }).x
+                transformCoordinates({ x: bounds.maxX, z: bounds.maxZ + 8 }).x
               }
               y2={
-                transformCoordinates({ x: bounds.maxX, z: bounds.maxZ + 10 }).y
+                transformCoordinates({ x: bounds.maxX, z: bounds.maxZ + 8 }).y
               }
               stroke="black"
               strokeWidth="1"
@@ -1241,14 +1259,11 @@ export default function InteractiveFloorPlan({
           {hasChanges && (
             <div
               style={{
-                position: "absolute",
-                bottom: "-30px",
-                left: "74%",
-                transform: "translateX(-50%)",
-                marginTop: "20px",
+                position: "fixed",
                 display: "flex",
                 gap: "10px",
-                width:"100%"
+                width:"100%", 
+                left: leftPosition,
               }}
             >
               <button className="save-button" onClick={saveFloorPlan}>Save Floor Plan</button>

@@ -37,9 +37,10 @@ html, body {
 
   .compass-container {
     position: fixed;
-    bottom: 20px;
+    bottom: 30px;
     right: 20px;
     z-index: 1000;
+    pointer-events: auto; 
   }
   
   .playground-container {
