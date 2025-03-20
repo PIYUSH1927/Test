@@ -10,6 +10,9 @@ import {
   handleVertexMouseDown,
   handleTouchStart,
   handleVertexTouchStart,
+  handleEdgeMouseDown,
+  handleEdgeTouchStart,
+  renderEdgeHandles,
 } from "./features/resizing";
 
 import { handleUndoChanges } from "./features/undo1";
@@ -58,11 +61,13 @@ interface DragState {
   active: boolean;
   roomId: string | null;
   vertexIndex: number | null;
+  edgeIndices: number[] | null; // Added for edge dragging
   startX: number;
   startY: number;
   lastX: number;
   lastY: number;
   isResizing: boolean;
+  isEdgeResizing: boolean; // Added for edge dragging
 }
 
 export default function InteractiveFloorPlan({
@@ -92,11 +97,13 @@ export default function InteractiveFloorPlan({
     active: false,
     roomId: null,
     vertexIndex: null,
+    edgeIndices: null, // Added for edge dragging
     startX: 0,
     startY: 0,
     lastX: 0,
     lastY: 0,
     isResizing: false,
+    isEdgeResizing: false // Added for edge dragging
   });
 
   const { saveState, undo, hasUndoState } = useSimpleUndoHistory();
@@ -172,6 +179,29 @@ export default function InteractiveFloorPlan({
     );
   };
 
+  // New handler for edge mouse down with history
+  const handleEdgeMouseDownWithHistory = (
+    event: React.MouseEvent,
+    roomId: string,
+    edgeIndices: number[],
+    svgRef: React.RefObject<SVGSVGElement | null>,
+    setDragState: React.Dispatch<React.SetStateAction<DragState>>,
+    setSelectedRoomId: React.Dispatch<React.SetStateAction<string | null>>,
+    setHasChanges: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    captureStateBeforeChange();
+
+    handleEdgeMouseDown(
+      event,
+      roomId,
+      edgeIndices,
+      svgRef as React.RefObject<SVGSVGElement>,
+      setDragState,
+      setSelectedRoomId,
+      setHasChanges
+    );
+  };
+
   const handleTouchStartWithHistory = (
     event: React.TouchEvent,
     roomId: string,
@@ -207,6 +237,29 @@ export default function InteractiveFloorPlan({
       event,
       roomId,
       vertexIndex,
+      svgRef as React.RefObject<SVGSVGElement>,
+      setDragState,
+      setSelectedRoomId,
+      setHasChanges
+    );
+  };
+
+  // New handler for edge touch start with history
+  const handleEdgeTouchStartWithHistory = (
+    event: React.TouchEvent,
+    roomId: string,
+    edgeIndices: number[],
+    svgRef: React.RefObject<SVGSVGElement | null>,
+    setDragState: React.Dispatch<React.SetStateAction<DragState>>,
+    setSelectedRoomId: React.Dispatch<React.SetStateAction<string | null>>,
+    setHasChanges: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    captureStateBeforeChange();
+
+    handleEdgeTouchStart(
+      event,
+      roomId,
+      edgeIndices,
       svgRef as React.RefObject<SVGSVGElement>,
       setDragState,
       setSelectedRoomId,
@@ -279,8 +332,9 @@ export default function InteractiveFloorPlan({
 
         const isClickInsideRoom = target.closest(".room-polygon");
         const isClickOnRotateButton = target.closest(".rotate-button");
+        const isClickOnResizeHandle = target.closest(".resize-handle, .resize-edge");
 
-        if (!isClickInsideRoom && !isClickOnRotateButton && selectedRoomId) {
+        if (!isClickInsideRoom && !isClickOnRotateButton && !isClickOnResizeHandle && selectedRoomId) {
           setSelectedRoomId(null);
         }
       }
@@ -335,6 +389,30 @@ export default function InteractiveFloorPlan({
     return getOverlappingRoomNames(overlappingRooms, getRoomType);
   };
 
+  // Add CSS styles for edge handles
+  const edgeStyles = `
+    .resize-edge {
+      cursor: move;
+      stroke-opacity: 0;
+    }
+    
+    .resize-edge:hover + .edge-indicator, 
+    .resize-edge:active + .edge-indicator {
+      stroke: #2196F3;
+      stroke-opacity: 0.7;
+    }
+    
+    .edge-indicator {
+      stroke-opacity: 0;
+      transition: stroke-opacity 0.2s;
+    }
+    
+    .resize-edge:hover + .edge-indicator, 
+    .resize-edge:active + .edge-indicator {
+      stroke-opacity: 1;
+    }
+  `;
+
   return (
     <div>
       {renderOverlapAlert({
@@ -344,6 +422,7 @@ export default function InteractiveFloorPlan({
 
       <div>
         <style>{floorPlanStyles}</style>
+        <style>{edgeStyles}</style>
 
         <div
           ref={floorPlanRef}
@@ -368,7 +447,7 @@ export default function InteractiveFloorPlan({
               <span
                 style={{ fontSize: "0.8em", marginLeft: "10px", color: "#666" }}
               >
-                (Ctrl+Z to undo last change)
+                (Ctrl/Cmd+Z to undo last change)
               </span>
             )}
           </p>
@@ -544,6 +623,21 @@ export default function InteractiveFloorPlan({
                       )
                     }
                   />
+
+                  {selectedRoomId === room.id && (
+                    // Render edge handles when the room is selected
+                    renderEdgeHandles(
+                      room,
+                      transformCoordinates,
+                      handleEdgeMouseDownWithHistory,
+                      handleEdgeTouchStartWithHistory,
+                      svgRef,
+                      setDragState,
+                      setSelectedRoomId,
+                      setHasChanges,
+                      isMobile
+                    )
+                  )}
 
                   {selectedRoomId === room.id &&
                     transformedPoints.map((point, index) => (

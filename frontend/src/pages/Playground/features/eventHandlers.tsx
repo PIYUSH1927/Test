@@ -1,6 +1,12 @@
 // features/eventHandlers.tsx
 import React, { useCallback, RefObject, useEffect } from "react";
-import { handleMouseMove, handleTouchMove, handleMouseUp, handleTouchEnd } from "./resizing";
+import { 
+  handleMouseMove, 
+  handleTouchMove, 
+  handleMouseUp, 
+  handleTouchEnd, 
+  useNonPassiveTouchHandling 
+} from "./resizing";
 
 interface Point {
   x: number;
@@ -11,11 +17,13 @@ interface DragState {
   active: boolean;
   roomId: string | null;
   vertexIndex: number | null;
+  edgeIndices: number[] | null; 
   startX: number;
   startY: number;
   lastX: number;
   lastY: number;
   isResizing: boolean;
+  isEdgeResizing: boolean; 
 }
 
 interface Room {
@@ -45,6 +53,9 @@ export function useEventHandlers(
   setDragState: React.Dispatch<React.SetStateAction<DragState>>,
   checkAndUpdateOverlaps: () => boolean | void
 ) {
+  // Add non-passive touch handling
+  useNonPassiveTouchHandling(svgRef);
+
   const handleMouseMoveCallback = useCallback(
     (event: MouseEvent) => {
       handleMouseMove(
@@ -59,7 +70,7 @@ export function useEventHandlers(
         setDragState
       );
     },
-    [dragState, reverseTransformCoordinates, scale]
+    [dragState, reverseTransformCoordinates, scale, calculateRoomDimensions, calculateRoomArea, setFloorPlanData]
   );
 
   const handleTouchMoveCallback = useCallback(
@@ -76,16 +87,16 @@ export function useEventHandlers(
         setDragState
       );
     },
-    [dragState, reverseTransformCoordinates, scale]
+    [dragState, reverseTransformCoordinates, scale, calculateRoomDimensions, calculateRoomArea, setFloorPlanData]
   );
 
   const handleMouseUpCallback = useCallback(() => {
     handleMouseUp(setDragState, checkAndUpdateOverlaps);
-  }, [checkAndUpdateOverlaps]);
+  }, [checkAndUpdateOverlaps, setDragState]);
 
   const handleTouchEndCallback = useCallback(() => {
     handleTouchEnd(setDragState, checkAndUpdateOverlaps);
-  }, [checkAndUpdateOverlaps]);
+  }, [checkAndUpdateOverlaps, setDragState]);
 
   useEffect(() => {
     const preventDefaultTouchMove = (e: TouchEvent) => {
