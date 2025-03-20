@@ -365,7 +365,7 @@ html, body {
   top: 30px; 
   right: 40px; 
   cursor: pointer;
-  z-index: 1001; 
+  z-index: 999; 
 }
 
 .three-d-icon img {
