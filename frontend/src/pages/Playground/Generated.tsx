@@ -622,6 +622,7 @@ export default function InteractiveFloorPlan({
                           height: isMobile ? "25px" : "40px",
                           position: "relative",
                           right: isMobile ? "8px" : "12px",
+                          bottom:"5px",
                           borderRadius: "50%",
                           zIndex: "100",
                           background: "transparent",
