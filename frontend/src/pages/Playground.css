@@ -38,14 +38,13 @@ html, body {
 .compass-container {
   position: fixed !important;
   bottom: 10px !important;
-  right: 20px !important;
+  right: 10px !important;
   z-index: 1000 !important; 
   pointer-events: auto;
   transform: none !important; 
   will-change: transform; 
 }
 
-  
   .playground-container {
     position: absolute;
     inset: 0;
@@ -361,3 +360,33 @@ html, body {
   }
 }
 
+.three-d-icon {
+  position: fixed;
+  top: 30px; 
+  right: 40px; 
+  cursor: pointer;
+  z-index: 1001; 
+}
+
+.three-d-icon img {
+  width: 50px; 
+  height: 50px;
+  transition: transform 0.2s ease-in-out;
+}
+
+.three-d-icon:hover img {
+  transform: scale(1.1);
+}
+
+@media (max-width: 700px) {
+  .three-d-icon {
+    top: auto; 
+    right: auto; 
+    bottom: 45px; 
+    left: 30px;
+  }
+
+  .compass-container {
+    right: 0px !important;
+  }
+}

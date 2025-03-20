@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { InfiniteGrid } from "./Playground/components/Grid";
 import Generated from "./Playground/Generated";
 import { Compass } from "./Playground/components/Compass";
+import { useNavigate } from "react-router-dom";
 import "./Playground.css";
 
 const roomData = [
@@ -219,6 +220,7 @@ const Playground = () => {
   );
 
   const totalRooms = rooms.reduce((sum, room) => sum + room.count, 0);
+  const navigate = useNavigate(); 
 
   return (
     <div
@@ -259,6 +261,14 @@ const Playground = () => {
           onRotate={setRotation}
         />
       </div>
+
+      <div 
+      className="three-d-icon" 
+      onClick={() => navigate("/3d")}
+    >
+      <img src="/3dview.png" alt="3D View" />
+    </div>
+    
       {isModalOpen && (
         <div className="modal-overlay" style={{ zIndex: 1000 }}>
           <div className="modal">
