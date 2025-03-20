@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { DarkModeProvider, useDarkMode } from '../contexts/DarkModeContext';
 import './Features.css';
 
-// Define types for the FeatureCard props
 interface FeatureCardProps {
   title: string;
   description: string;

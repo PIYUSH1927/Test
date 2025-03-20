@@ -1,6 +1,4 @@
 import { useRef, useEffect } from "react";
-import Generated from "./Generated";
-
 
 interface InfiniteGridProps {
   width: number;

@@ -1,7 +1,7 @@
-import { useState, useCallback , useEffect} from "react";
-import { InfiniteGrid } from "./Playground/Grid";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { InfiniteGrid } from "./Playground/components/Grid";
 import Generated from "./Playground/Generated";
-import { Compass } from "./Playground/Compass";
+import { Compass } from "./Playground/components/Compass";
 import "./Playground.css";
 
 const roomData = [
@@ -16,6 +16,7 @@ const roomData = [
 ];
 
 const Playground = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -31,12 +32,60 @@ const Playground = () => {
 
   const [touchStartDistance, setTouchStartDistance] = useState(0);
 
-const getDistance = (touches: React.TouchList): number => {
-  if (touches.length < 2) return 0;
-  const dx = touches[0].clientX - touches[1].clientX;
-  const dy = touches[0].clientY - touches[1].clientY;
-  return Math.sqrt(dx * dx + dy * dy);
-};
+  // Prevent browser zoom with meta keys (Ctrl/Cmd)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if Ctrl or Cmd key is pressed
+      if (e.ctrlKey || e.metaKey) {
+        // Look for specific key combinations that trigger browser zoom
+        if (e.key === "+" || e.key === "-" || e.key === "=") {
+          e.preventDefault();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Handle wheel events for custom zoom
+  useEffect(() => {
+    const targetElement = containerRef.current;
+    if (!targetElement) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (isModalOpen) return;
+
+      // Only handle zoom when Ctrl key is pressed
+      if (e.ctrlKey) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        setScale((prevScale) => Math.min(Math.max(0.1, prevScale * delta), 20));
+      } else {
+        // Normal scrolling for panning
+        setPosition((prev) => ({
+          x: prev.x - e.deltaX,
+          y: prev.y - e.deltaY,
+        }));
+      }
+    };
+
+    // We need to use the non-passive listener to call preventDefault
+    targetElement.addEventListener('wheel', handleWheel, { passive: false });
+    
+    return () => {
+      targetElement.removeEventListener('wheel', handleWheel);
+    };
+  }, [isModalOpen, scale]);
+
+  const getDistance = (touches: React.TouchList): number => {
+    if (touches.length < 2) return 0;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>): void => {
     if (isModalOpen) return;
@@ -46,7 +95,6 @@ const getDistance = (touches: React.TouchList): number => {
     }
     
     if (e.touches.length === 2) {
-      
       const distance = getDistance(e.touches);
       setTouchStartDistance(distance);
     } else if (e.touches.length === 1) {
@@ -114,25 +162,11 @@ const getDistance = (touches: React.TouchList): number => {
     }
   }, [scale, isDragging, lastMousePosition, touchStartDistance, isModalOpen]);
 
-
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      if (isModalOpen) {
-        e.stopPropagation(); 
-        return;
-      }
-    
-    e.preventDefault();
-    if (e.ctrlKey) {
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      setScale((prevScale) => Math.min(Math.max(0.1, prevScale * delta), 20));
-    } else {
-      setPosition((prev) => ({
-        x: prev.x - e.deltaX,
-        y: prev.y - e.deltaY,
-      }));
-    }
-  }, [isModalOpen]);
+  // We're now handling wheel events in the useEffect above, so this is just a dummy function
+  const handleWheel = (e: React.WheelEvent) => {
+    // The actual logic is handled in the useEffect with the non-passive listener
+    // This is just to handle React synthetic events if needed
+  };
 
   const toggleDropdown = (index: number) => {
     setRooms((prevRooms) =>
@@ -188,6 +222,7 @@ const getDistance = (touches: React.TouchList): number => {
 
   return (
     <div
+      ref={containerRef}
       className="absolute inset-0 overflow-hidden"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
@@ -204,17 +239,17 @@ const getDistance = (touches: React.TouchList): number => {
         rotation={rotation}
       />
 
-<div
-  style={{
-    position: "absolute",
-    top: "46%",
-    left: "43%",
-    transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
-    transformOrigin: "center",
-  }}
->
-  <Generated rotation={rotation} />
-</div>
+      <div
+        style={{
+          position: "absolute",
+          top: "46%",
+          left: "43%",
+          transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
+          transformOrigin: "center",
+        }}
+      >
+        <Generated rotation={rotation} />
+      </div>
 
 
       <div className="compass-container">
@@ -289,14 +324,20 @@ const getDistance = (touches: React.TouchList): number => {
                     <div className="counter">
                       <button
                         style={{ fontSize: "15px", color: "black" }}
-                        onClick={() => updateRoomCount(index, -1)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateRoomCount(index, -1);
+                        }}
                       >
                         -
                       </button>
                       <span>{room.count}</span>
                       <button
                         style={{ fontSize: "15px", color: "black" }}
-                        onClick={() => updateRoomCount(index, 1)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateRoomCount(index, 1);
+                        }}
                       >
                         +
                       </button>

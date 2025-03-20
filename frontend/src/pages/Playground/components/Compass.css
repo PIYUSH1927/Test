@@ -1,0 +1,103 @@
+.compass-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+  }
+  
+  .rotate-button {
+    width: 50px;
+    height: 45px;
+    border-radius: 100%;
+    background-color: #6366F1;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    border: none;
+    cursor: pointer;
+  }
+  
+  .rotate-button:hover {
+    background-color: #4F46E5;
+  }
+  
+  .rotate-left-icon {
+    transform: rotate(1deg);
+  }
+  
+  .rotate-right-icon {
+    transform: scaleX(-1) rotate(1deg);
+  }
+  
+  .compass-body {
+    position: relative;
+    
+
+  }
+  
+  .compass-dial {
+    position: absolute;
+    inset: 0;
+    border-radius: 100%;
+    background-color: white;
+    border: 2px solid black;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    
+  }
+  
+  .compass-text {
+    position: absolute;
+    font-weight: bold;
+    font-size: 1.125rem; 
+   
+  }
+  
+  .north {
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  
+  .south {
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  
+  .east {
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  
+  .west {
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  
+  .compass-needle {
+    position: absolute;
+    height: 90%;
+    width: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 5%;
+  }
+  
+  .needle-top {
+    height: 50%;
+    width: 100%;
+    background-color: red; 
+  }
+  
+  .needle-bottom {
+    height: 50%;
+    width: 100%;
+    background-color: rgb(68, 67, 67);
+  }
+  

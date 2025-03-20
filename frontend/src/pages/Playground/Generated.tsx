@@ -1,5 +1,37 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactDOM from "react-dom";
+import {
+  renderOverlapAlert,
+  getOverlappingRoomNames,
+  isRoomOverlapping,
+} from "./features/warning";
+import {
+  handleMouseDown,
+  handleVertexMouseDown,
+  handleTouchStart,
+  handleVertexTouchStart,
+} from "./features/resizing";
+
+import { handleUndoChanges } from "./features/undo1";
+import {
+  calculateRoomCentroid,
+  calculateRoomArea,
+  calculateRoomDimensions,
+} from "./features/roomCalculations";
+import {
+  calculateBounds,
+  useCoordinateTransforms,
+} from "./features/coordinates";
+import { roomColors, floorPlanStyles } from "./features/styles";
+import { useInterval } from "./features/intervalHooks";
+import { useEventHandlers, handleRoomClick } from "./features/eventHandlers";
+import { saveFloorPlan } from "./features/save";
+import { initialFloorPlanData } from "./features/initialData";
+import {
+  handleRotateRoom,
+  checkAndUpdateOverlaps as checkRoomOverlaps,
+} from "./features/rotation";
+import { useSimpleUndoHistory, useUndoShortcut } from "./features/history";
 
 interface Point {
   x: number;
@@ -33,322 +65,18 @@ interface DragState {
   isResizing: boolean;
 }
 
-const roomColors: Record<string, string> = {
-  MasterRoom: "#FFD3B6",
-  LivingRoom: "#FFAAA5",
-  ChildRoom: "#D5AAFF",
-  Kitchen: "#FFCC5C",
-  Bathroom: "#85C1E9",
-  Balcony: "#B2DFDB",
-  SecondRoom: "#F6D55C",
-  DiningRoom: "#A5D6A7",
-};
-
-const styles = `
-.floor-plan {
-  position: relative;
-  background-color: #f8f8f8;
-  border: 2px solid #000;
-  overflow: hidden;
-}
-
-.room-polygon {
-  opacity: 0.8;
-  stroke: #000;  
-  stroke-width: 3px;  
-  cursor: move;
-  transition: all 0.2s ease;
-  stroke-linejoin: miter; 
-  shape-rendering: crispEdges;
-  touch-action: none; 
-}
-
-svg {
-  vector-effect: non-scaling-stroke;
-  touch-action: none; 
-}
-
-.floor-plan-container {
-  touch-action: none;
-}
-
-.room-polygon.selected {
-  fill: rgba(224, 224, 255, 0.8);
-  stroke: #0000ff;
-  stroke-width: 4px; 
-}
-
-.room-polygon.overlapping {
-  stroke: #ff0000;
-  stroke-width: 4px;
-  stroke-dasharray: 5,5;
-}
-
-.resize-handle {
-  fill: white;
-  stroke: black;
-  stroke-width: 2px;
-  cursor: nwse-resize;
-}
-
-.resize-handle:hover {
-  fill: #ffcc00;
-}
-
-.room-label {
-  pointer-events: none;
-  user-select: none;
-  font-size: 11px;
-  text-anchor: middle;
-}
-
-.room-name {
-  font-weight: bold;
-  font-size: 13px;
-}
-
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.room-info {
-  margin-top: 20px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-}
-
-.input-group {
-  display: flex;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.input-group label {
-  width: 100px;
-  font-weight: bold;
-}
-
-.input-group input {
-  padding: 5px;
-  border: 1px solid #ccc;
-  border-radius: 3px;
-}
-
-button {
-  padding: 8px 16px;
-  margin: 0 5px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.save-button {
-  background-color: #4CAF50;
-  color: white;
-
-}
-
-.save-button:hover {
-  background-color: #45a049;
-}
-
-.undo-button {
-  background-color: #f44336;
-  color: white;
-}
-
-.undo-button:hover {
-  background-color: #d32f2f;
-}
-
-.buttons-container {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-}
-
-.overlap-alert {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  background-color: rgba(244, 67, 54, 0.8); 
-  color: white;
-  padding: 10px 15px;
-  text-align: center;
-  font-weight: bold;
-  z-index: 9999;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  pointer-events: none;
-}
-  
-
-@media (max-width: 850px) {
-  .room-label {
-    font-size: 8px !important;
-  }
-  
-  .room-name {
-    font-size: 10px !important;
-  }
-}
-`;
-
-const useInterval = (callback: () => void, delay: number | null) => {
-  const savedCallback = useRef<() => void | undefined>(callback);
-
-  useEffect(() => {
-    savedCallback.current = callback;
-  }, [callback]);
-
-  useEffect(() => {
-    function tick() {
-      savedCallback.current?.();
-    }
-    if (delay !== null) {
-      const id = setInterval(tick, delay);
-      return () => clearInterval(id);
-    }
-  }, [delay]);
-};
-
 export default function InteractiveFloorPlan({
   rotation = 0,
 }: {
   rotation?: number;
 }) {
-  const initialFloorPlanData: FloorPlanData = {
-    room_count: 8,
-    total_area: 62.57,
-    room_types: [
-      "SecondRoom",
-      "MasterRoom",
-      "Bathroom",
-      "LivingRoom",
-      "Balcony",
-      "Kitchen",
-      "Balcony",
-      "Balcony",
-    ],
-    rooms: [
-      {
-        id: "room|0",
-        room_type: "MasterRoom",
-        area: 10.01,
-        height: 2.88,
-        width: 3.52,
-        floor_polygon: [
-          { x: 141, z: 75 },
-          { x: 191, z: 75 },
-          { x: 191, z: 116 },
-          { x: 141, z: 116 },
-        ],
-      },
-      {
-        id: "room|1",
-        room_type: "LivingRoom",
-        area: 25.14,
-        height: 5.48,
-        width: 8.86,
-        floor_polygon: [
-          { x: 65, z: 75 },
-          { x: 137, z: 75 },
-          { x: 137, z: 122 },
-          { x: 191, z: 122 },
-          { x: 191, z: 139 },
-          { x: 141, z: 139 },
-          { x: 141, z: 153 },
-          { x: 123, z: 153 },
-          { x: 123, z: 139 },
-          { x: 65, z: 139 },
-        ],
-      },
-      {
-        id: "room|2",
-        room_type: "ChildRoom",
-        area: 8.31,
-        height: 2.67,
-        width: 3.23,
-        floor_polygon: [
-          { x: 145, z: 143 },
-          { x: 191, z: 143 },
-          { x: 191, z: 181 },
-          { x: 145, z: 181 },
-        ],
-      },
-      {
-        id: "room|3",
-        room_type: "Kitchen",
-        area: 4.75,
-        height: 1.27,
-        width: 3.8,
-        floor_polygon: [
-          { x: 65, z: 143 },
-          { x: 119, z: 143 },
-          { x: 119, z: 161 },
-          { x: 65, z: 161 },
-        ],
-      },
-      {
-        id: "room|4",
-        room_type: "Bathroom",
-        area: 2.37,
-        height: 1.69,
-        width: 1.27,
-        floor_polygon: [
-          { x: 123, z: 157 },
-          { x: 141, z: 157 },
-          { x: 141, z: 181 },
-          { x: 123, z: 181 },
-        ],
-      },
-      {
-        id: "room|5",
-        room_type: "Balcony",
-        area: 3.11,
-        height: 0.98,
-        width: 3.8,
-        floor_polygon: [
-          { x: 65, z: 55 },
-          { x: 119, z: 55 },
-          { x: 119, z: 69 },
-          { x: 65, z: 69 },
-        ],
-      },
-      {
-        id: "room|6",
-        room_type: "Balcony",
-        area: 3.11,
-        height: 1.12,
-        width: 3.8,
-        floor_polygon: [
-          { x: 65, z: 165 },
-          { x: 119, z: 165 },
-          { x: 119, z: 181 },
-          { x: 65, z: 181 },
-        ],
-      },
-      {
-        id: "room|7",
-        room_type: "Balcony",
-        area: 5.76,
-        height: 1.12,
-        width: 3.8,
-        floor_polygon: [
-          { x: 145, z: 185 },
-          { x: 191, z: 185 },
-          { x: 191, z: 197 },
-          { x: 145, z: 197 },
-        ],
-      },
-    ],
-  };
-
   const [hasChanges, setHasChanges] = useState(false);
   const [leftPosition, setLeftPosition] = useState("10%");
-  const [floorPlanData, setFloorPlanData] = useState<FloorPlanData>(initialFloorPlanData);
+  const [floorPlanData, setFloorPlanData] =
+    useState<FloorPlanData>(initialFloorPlanData);
+  const [roomRotations, setRoomRotations] = useState<{ [key: string]: number }>(
+    {}
+  );
 
   const tlength = 15;
   const twidth = 10;
@@ -371,6 +99,155 @@ export default function InteractiveFloorPlan({
     isResizing: false,
   });
 
+  const { saveState, undo, hasUndoState } = useSimpleUndoHistory();
+
+  const handleUndo = useCallback(() => {
+    undo((state) => {
+      if (state) {
+        setFloorPlanData(state.floorPlanData);
+        setRoomRotations(state.roomRotations);
+      }
+    });
+  }, [undo]);
+
+  useUndoShortcut(handleUndo);
+
+  const isCapturingState = useRef(false);
+
+  const captureStateBeforeChange = () => {
+    if (!isCapturingState.current) {
+      isCapturingState.current = true;
+      saveState({
+        floorPlanData: JSON.parse(JSON.stringify(floorPlanData)),
+        roomRotations: { ...roomRotations },
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!dragState.active) {
+      isCapturingState.current = false;
+    }
+  }, [dragState.active]);
+
+  const handleMouseDownWithHistory = (
+    event: React.MouseEvent,
+    roomId: string,
+    svgRef: React.RefObject<SVGSVGElement | null>,
+    setDragState: React.Dispatch<React.SetStateAction<DragState>>,
+    setHasChanges: React.Dispatch<React.SetStateAction<boolean>>,
+    setSelectedRoomId: React.Dispatch<React.SetStateAction<string | null>>
+  ) => {
+    captureStateBeforeChange();
+
+    handleMouseDown(
+      event,
+      roomId,
+      svgRef as React.RefObject<SVGSVGElement>,
+      setDragState,
+      setHasChanges,
+      setSelectedRoomId
+    );
+  };
+
+  const handleVertexMouseDownWithHistory = (
+    event: React.MouseEvent,
+    roomId: string,
+    vertexIndex: number,
+    svgRef: React.RefObject<SVGSVGElement | null>,
+    setDragState: React.Dispatch<React.SetStateAction<DragState>>,
+    setSelectedRoomId: React.Dispatch<React.SetStateAction<string | null>>,
+    setHasChanges: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    captureStateBeforeChange();
+
+    handleVertexMouseDown(
+      event,
+      roomId,
+      vertexIndex,
+      svgRef as React.RefObject<SVGSVGElement>,
+      setDragState,
+      setSelectedRoomId,
+      setHasChanges
+    );
+  };
+
+  const handleTouchStartWithHistory = (
+    event: React.TouchEvent,
+    roomId: string,
+    svgRef: React.RefObject<SVGSVGElement | null>,
+    setDragState: React.Dispatch<React.SetStateAction<DragState>>,
+    setHasChanges: React.Dispatch<React.SetStateAction<boolean>>,
+    setSelectedRoomId: React.Dispatch<React.SetStateAction<string | null>>
+  ) => {
+    captureStateBeforeChange();
+
+    handleTouchStart(
+      event,
+      roomId,
+      svgRef as React.RefObject<SVGSVGElement>,
+      setDragState,
+      setHasChanges,
+      setSelectedRoomId
+    );
+  };
+
+  const handleVertexTouchStartWithHistory = (
+    event: React.TouchEvent,
+    roomId: string,
+    vertexIndex: number,
+    svgRef: React.RefObject<SVGSVGElement | null>,
+    setDragState: React.Dispatch<React.SetStateAction<DragState>>,
+    setSelectedRoomId: React.Dispatch<React.SetStateAction<string | null>>,
+    setHasChanges: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    captureStateBeforeChange();
+
+    handleVertexTouchStart(
+      event,
+      roomId,
+      vertexIndex,
+      svgRef as React.RefObject<SVGSVGElement>,
+      setDragState,
+      setSelectedRoomId,
+      setHasChanges
+    );
+  };
+
+  const handleRotateRoomWithHistory = (
+    roomId: string,
+    direction: "left" | "right",
+    roomRotations: { [key: string]: number },
+    setRoomRotations: React.Dispatch<
+      React.SetStateAction<{ [key: string]: number }>
+    >,
+    setHasChanges: React.Dispatch<React.SetStateAction<boolean>>,
+    checkAndUpdateOverlaps: () => void
+  ) => {
+    captureStateBeforeChange();
+
+    handleRotateRoom(
+      roomId,
+      direction,
+      roomRotations,
+      setRoomRotations,
+      setHasChanges,
+      checkAndUpdateOverlaps
+    );
+
+    setTimeout(() => {
+      isCapturingState.current = false;
+    }, 10);
+  };
+
+  const checkAndUpdateOverlaps = () => {
+    return checkRoomOverlaps(floorPlanData, roomRotations, setOverlappingRooms);
+  };
+
+  useInterval(() => {
+    checkAndUpdateOverlaps();
+  }, 300);
+
   useEffect(() => {
     checkAndUpdateOverlaps();
   }, []);
@@ -379,25 +256,9 @@ export default function InteractiveFloorPlan({
     checkAndUpdateOverlaps();
   }, 500);
 
-  const renderOverlapAlert = () => {
-    if (overlappingRooms.length === 0) return null;
-
-    return ReactDOM.createPortal(
-      <div className="overlap-alert">
-        Room overlap detected between {getOverlappingRoomNames()}
-      </div>,
-      document.body
-    );
-  };
-
-  const calculateBounds = () => {
-    const allPoints = floorPlanData.rooms.flatMap((room) => room.floor_polygon);
-    const minX = Math.min(...allPoints.map((p) => p.x));
-    const maxX = Math.max(...allPoints.map((p) => p.x));
-    const minZ = Math.min(...allPoints.map((p) => p.z));
-    const maxZ = Math.max(...allPoints.map((p) => p.z));
-
-    return { minX, maxX, minZ, maxZ };
+  const getRoomType = (roomId: string) => {
+    const room = floorPlanData.rooms.find((r) => r.id === roomId);
+    return room?.room_type;
   };
 
   useEffect(() => {
@@ -414,11 +275,12 @@ export default function InteractiveFloorPlan({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (!dragState.active) {
-        const isClickOutsideRooms = !Array.from(
-          document.querySelectorAll(".room-polygon")
-        ).some((polygon) => polygon.contains(event.target as Node));
+        const target = event.target as HTMLElement;
 
-        if (isClickOutsideRooms && selectedRoomId) {
+        const isClickInsideRoom = target.closest(".room-polygon");
+        const isClickOnRotateButton = target.closest(".rotate-button");
+
+        if (!isClickInsideRoom && !isClickOnRotateButton && selectedRoomId) {
           setSelectedRoomId(null);
         }
       }
@@ -433,418 +295,26 @@ export default function InteractiveFloorPlan({
     };
   }, [selectedRoomId, dragState.active]);
 
-  const bounds = calculateBounds();
+  const bounds = calculateBounds(floorPlanData.rooms);
   const padding = 20;
   const contentWidth = bounds.maxX - bounds.minX + 2 * padding;
   const contentHeight = bounds.maxZ - bounds.minZ + 2 * padding;
   const isMobile = window.innerWidth < 850;
 
-  const transformCoordinates = useCallback(
-    (point: Point) => {
-      return {
-        x: (point.x - bounds.minX + padding) * scale,
-        y: (point.z - bounds.minZ + padding) * scale,
-      };
-    },
-    [bounds.minX, bounds.minZ, padding, scale]
+  const { transformCoordinates, reverseTransformCoordinates } =
+    useCoordinateTransforms(bounds, padding, scale);
+
+  const eventHandlers = useEventHandlers(
+    dragState,
+    svgRef as React.RefObject<SVGSVGElement>,
+    scale,
+    reverseTransformCoordinates,
+    calculateRoomDimensions,
+    calculateRoomArea,
+    setFloorPlanData,
+    setDragState,
+    checkAndUpdateOverlaps
   );
-
-  const reverseTransformCoordinates = useCallback(
-    (x: number, y: number) => {
-      return {
-        x: x / scale + bounds.minX - padding,
-        z: y / scale + bounds.minZ - padding,
-      };
-    },
-    [bounds.minX, bounds.minZ, padding, scale]
-  );
-
-  const calculateRoomCentroid = (points: { x: number; y: number }[]) => {
-    if (points.length === 0) return { x: 0, y: 0 };
-
-    let sumX = 0;
-    let sumY = 0;
-
-    points.forEach((point) => {
-      sumX += point.x;
-      sumY += point.y;
-    });
-
-    return {
-      x: sumX / points.length,
-      y: sumY / points.length,
-    };
-  };
-
-  const calculateRoomArea = (polygon: Point[]) => {
-    if (polygon.length < 3) return 0;
-
-    let area = 0;
-    for (let i = 0; i < polygon.length; i++) {
-      const j = (i + 1) % polygon.length;
-      area += polygon[i].x * polygon[j].z;
-      area -= polygon[j].x * polygon[i].z;
-    }
-
-    area = Math.abs(area) / 2;
-    return area / 100;
-  };
-
-  const calculateRoomDimensions = (polygon: Point[]) => {
-    if (polygon.length < 3) return { width: 0, height: 0 };
-
-    const xCoords = polygon.map((p) => p.x);
-    const zCoords = polygon.map((p) => p.z);
-
-    const minX = Math.min(...xCoords);
-    const maxX = Math.max(...xCoords);
-    const minZ = Math.min(...zCoords);
-    const maxZ = Math.max(...zCoords);
-
-    return {
-      width: (maxX - minX) / 10,
-      height: (maxZ - minZ) / 10,
-    };
-  };
-
-  const checkAndUpdateOverlaps = () => {
-    const overlaps = checkRoomOverlap();
-    setOverlappingRooms(overlaps);
-    return overlaps.length > 0;
-  };
-
-  const handleRoomClick = (
-    roomId: string,
-    event: React.MouseEvent | React.TouchEvent
-  ) => {
-    event.stopPropagation();
-
-    if (roomId !== selectedRoomId) {
-      setSelectedRoomId(roomId);
-    }
-  };
-
-  const handleMouseDown = (event: React.MouseEvent, roomId: string) => {
-    event.stopPropagation();
-    event.preventDefault();
-
-    if (event.button !== 0) return;
-
-    const svgElement = svgRef.current;
-    if (!svgElement) return;
-
-    const svgRect = svgElement.getBoundingClientRect();
-    const mouseX = event.clientX - svgRect.left;
-    const mouseY = event.clientY - svgRect.top;
-
-    setDragState({
-      active: true,
-      roomId,
-      vertexIndex: null,
-      startX: mouseX,
-      startY: mouseY,
-      lastX: mouseX,
-      lastY: mouseY,
-      isResizing: false,
-    });
-
-    setHasChanges(true);
-    setSelectedRoomId(roomId);
-  };
-
-  const handleVertexMouseDown = (
-    event: React.MouseEvent,
-    roomId: string,
-    vertexIndex: number
-  ) => {
-    event.stopPropagation();
-    event.preventDefault();
-
-    const svgElement = svgRef.current;
-    if (!svgElement) return;
-
-    const svgRect = svgElement.getBoundingClientRect();
-    const mouseX = event.clientX - svgRect.left;
-    const mouseY = event.clientY - svgRect.top;
-
-    setDragState({
-      active: true,
-      roomId,
-      vertexIndex,
-      startX: mouseX,
-      startY: mouseY,
-      lastX: mouseX,
-      lastY: mouseY,
-      isResizing: true,
-    });
-
-    setSelectedRoomId(roomId);
-
-    setHasChanges(true);
-  };
-
-  const handleTouchStart = (event: React.TouchEvent, roomId: string) => {
-    event.stopPropagation();
-
-    if (event.touches.length !== 1) return;
-
-    event.preventDefault();
-
-    document.body.setAttribute("data-room-touch-interaction", "true");
-
-    const touch = event.touches[0];
-    const svgElement = svgRef.current;
-    if (!svgElement) return;
-
-    const svgRect = svgElement.getBoundingClientRect();
-    const touchX = touch.clientX - svgRect.left;
-    const touchY = touch.clientY - svgRect.top;
-
-    setDragState({
-      active: true,
-      roomId,
-      vertexIndex: null,
-      startX: touchX,
-      startY: touchY,
-      lastX: touchX,
-      lastY: touchY,
-      isResizing: false,
-    });
-
-    setHasChanges(true);
-    setSelectedRoomId(roomId);
-  };
-
-  const handleVertexTouchStart = (
-    event: React.TouchEvent,
-    roomId: string,
-    vertexIndex: number
-  ) => {
-    event.stopPropagation();
-
-    if (event.touches.length !== 1) return;
-
-    event.preventDefault();
-
-    document.body.setAttribute("data-room-touch-interaction", "true");
-
-    const touch = event.touches[0];
-    const svgElement = svgRef.current;
-    if (!svgElement) return;
-
-    const svgRect = svgElement.getBoundingClientRect();
-    const touchX = touch.clientX - svgRect.left;
-    const touchY = touch.clientY - svgRect.top;
-
-    setDragState({
-      active: true,
-      roomId,
-      vertexIndex,
-      startX: touchX,
-      startY: touchY,
-      lastX: touchX,
-      lastY: touchY,
-      isResizing: true,
-    });
-
-    setSelectedRoomId(roomId);
-
-    setHasChanges(true);
-  };
-
-  const handleTouchMove = useCallback(
-    (event: TouchEvent) => {
-      if (!dragState.active || !dragState.roomId) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      if (event.touches.length !== 1) return;
-
-      const touch = event.touches[0];
-      const svgElement = svgRef.current;
-      if (!svgElement) return;
-
-      const svgRect = svgElement.getBoundingClientRect();
-      const touchX = touch.clientX - svgRect.left;
-      const touchY = touch.clientY - svgRect.top;
-
-      const deltaX = touchX - dragState.lastX;
-      const deltaY = touchY - dragState.lastY;
-
-      setFloorPlanData((prevData) => {
-        const updatedRooms = [...prevData.rooms];
-        const roomIndex = updatedRooms.findIndex(
-          (room) => room.id === dragState.roomId
-        );
-
-        if (roomIndex === -1) return prevData;
-
-        const room = { ...updatedRooms[roomIndex] };
-
-        if (dragState.isResizing && dragState.vertexIndex !== null) {
-          const updatedPolygon = [...room.floor_polygon];
-          const point = reverseTransformCoordinates(touchX, touchY);
-          updatedPolygon[dragState.vertexIndex] = point;
-
-          const dimensions = calculateRoomDimensions(updatedPolygon);
-          const area = calculateRoomArea(updatedPolygon);
-
-          room.floor_polygon = updatedPolygon;
-          room.width = dimensions.width;
-          room.height = dimensions.height;
-          room.area = area;
-        } else {
-          const updatedPolygon = room.floor_polygon.map((point) => {
-            return {
-              x: point.x + deltaX / scale,
-              z: point.z + deltaY / scale,
-            };
-          });
-
-          room.floor_polygon = updatedPolygon;
-        }
-
-        updatedRooms[roomIndex] = room;
-
-        const totalArea = updatedRooms.reduce(
-          (sum, room) => sum + room.area,
-          0
-        );
-
-        return {
-          ...prevData,
-          rooms: updatedRooms,
-          total_area: parseFloat(totalArea.toFixed(2)),
-        };
-      });
-
-      setDragState((prev) => ({
-        ...prev,
-        lastX: touchX,
-        lastY: touchY,
-      }));
-    },
-    [dragState, reverseTransformCoordinates, scale]
-  );
-
-  useEffect(() => {
-    const preventDefaultTouchMove = (e: TouchEvent) => {
-      if (dragState.active) {
-        e.preventDefault();
-      }
-    };
-
-    document.addEventListener("touchmove", preventDefaultTouchMove, {
-      passive: false,
-    });
-
-    return () => {
-      document.removeEventListener("touchmove", preventDefaultTouchMove);
-    };
-  }, [dragState.active]);
-
-  const handleTouchEnd = useCallback(() => {
-    document.body.removeAttribute("data-room-touch-interaction");
-
-    setDragState({
-      active: false,
-      roomId: null,
-      vertexIndex: null,
-      startX: 0,
-      startY: 0,
-      lastX: 0,
-      lastY: 0,
-      isResizing: false,
-    });
-
-    checkAndUpdateOverlaps();
-  }, []);
-
-  const handleMouseMove = useCallback(
-    (event: MouseEvent) => {
-      if (!dragState.active || !dragState.roomId) return;
-
-      const svgElement = svgRef.current;
-      if (!svgElement) return;
-
-      const svgRect = svgElement.getBoundingClientRect();
-      const mouseX = event.clientX - svgRect.left;
-      const mouseY = event.clientY - svgRect.top;
-
-      const deltaX = mouseX - dragState.lastX;
-      const deltaY = mouseY - dragState.lastY;
-
-      setFloorPlanData((prevData) => {
-        const updatedRooms = [...prevData.rooms];
-        const roomIndex = updatedRooms.findIndex(
-          (room) => room.id === dragState.roomId
-        );
-
-        if (roomIndex === -1) return prevData;
-
-        const room = { ...updatedRooms[roomIndex] };
-
-        if (dragState.isResizing && dragState.vertexIndex !== null) {
-          const updatedPolygon = [...room.floor_polygon];
-          const point = reverseTransformCoordinates(mouseX, mouseY);
-          updatedPolygon[dragState.vertexIndex] = point;
-
-          const dimensions = calculateRoomDimensions(updatedPolygon);
-          const area = calculateRoomArea(updatedPolygon);
-
-          room.floor_polygon = updatedPolygon;
-          room.width = dimensions.width;
-          room.height = dimensions.height;
-          room.area = area;
-        } else {
-          const updatedPolygon = room.floor_polygon.map((point) => {
-            return {
-              x: point.x + deltaX / scale,
-              z: point.z + deltaY / scale,
-            };
-          });
-
-          room.floor_polygon = updatedPolygon;
-        }
-
-        updatedRooms[roomIndex] = room;
-
-        const totalArea = updatedRooms.reduce(
-          (sum, room) => sum + room.area,
-          0
-        );
-
-        return {
-          ...prevData,
-          rooms: updatedRooms,
-          total_area: parseFloat(totalArea.toFixed(2)),
-        };
-      });
-
-      setDragState((prev) => ({
-        ...prev,
-        lastX: mouseX,
-        lastY: mouseY,
-      }));
-    },
-    [dragState, reverseTransformCoordinates, scale]
-  );
-
-  const handleMouseUp = useCallback(() => {
-    setDragState({
-      active: false,
-      roomId: null,
-      vertexIndex: null,
-      startX: 0,
-      startY: 0,
-      lastX: 0,
-      lastY: 0,
-      isResizing: false,
-    });
-
-    checkAndUpdateOverlaps();
-  }, []);
 
   useEffect(() => {
     const updateLeft = () => {
@@ -861,180 +331,19 @@ export default function InteractiveFloorPlan({
     return () => window.removeEventListener("resize", updateLeft);
   }, []);
 
-
-  useEffect(() => {
-    if (dragState.active) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-
-      document.addEventListener("touchmove", handleTouchMove, {
-        passive: false,
-      });
-      document.addEventListener("touchend", handleTouchEnd);
-      document.addEventListener("touchcancel", handleTouchEnd);
-
-      return () => {
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-        document.removeEventListener("touchmove", handleTouchMove);
-        document.removeEventListener("touchend", handleTouchEnd);
-        document.removeEventListener("touchcancel", handleTouchEnd);
-      };
-    }
-  }, [
-    dragState.active,
-    handleMouseMove,
-    handleMouseUp,
-    handleTouchMove,
-    handleTouchEnd,
-  ]);
-
-  const checkRoomOverlap = () => {
-    const overlaps: string[][] = [];
-
-    const isPointInPolygon = (point: Point, polygon: Point[]) => {
-      let inside = false;
-      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-        const xi = polygon[i].x,
-          yi = polygon[i].z;
-        const xj = polygon[j].x,
-          yj = polygon[j].z;
-
-        const intersect =
-          yi > point.z !== yj > point.z &&
-          point.x < ((xj - xi) * (point.z - yi)) / (yj - yi) + xi;
-
-        if (intersect) inside = !inside;
-      }
-      return inside;
-    };
-
-    const doLineSegmentsIntersect = (
-      p1: Point,
-      p2: Point,
-      p3: Point,
-      p4: Point
-    ) => {
-      const d1x = p2.x - p1.x;
-      const d1z = p2.z - p1.z;
-      const d2x = p4.x - p3.x;
-      const d2z = p4.z - p3.z;
-      const det = d1x * d2z - d1z * d2x;
-
-      if (det === 0) return false;
-
-      const dx = p3.x - p1.x;
-      const dz = p3.z - p1.z;
-
-      const t1 = (dx * d2z - dz * d2x) / det;
-      const t2 = (dx * d1z - dz * d1x) / det;
-
-      return t1 >= 0 && t1 <= 1 && t2 >= 0 && t2 <= 1;
-    };
-
-    const doPolygonsIntersect = (poly1: Point[], poly2: Point[]) => {
-      for (let i = 0; i < poly1.length; i++) {
-        const i2 = (i + 1) % poly1.length;
-
-        for (let j = 0; j < poly2.length; j++) {
-          const j2 = (j + 1) % poly2.length;
-
-          if (
-            doLineSegmentsIntersect(poly1[i], poly1[i2], poly2[j], poly2[j2])
-          ) {
-            return true;
-          }
-        }
-      }
-
-      if (
-        isPointInPolygon(poly1[0], poly2) ||
-        isPointInPolygon(poly2[0], poly1)
-      ) {
-        return true;
-      }
-
-      return false;
-    };
-
-    for (let i = 0; i < floorPlanData.rooms.length; i++) {
-      for (let j = i + 1; j < floorPlanData.rooms.length; j++) {
-        const room1 = floorPlanData.rooms[i];
-        const room2 = floorPlanData.rooms[j];
-
-        const xCoords1 = room1.floor_polygon.map((p) => p.x);
-        const zCoords1 = room1.floor_polygon.map((p) => p.z);
-        const minX1 = Math.min(...xCoords1);
-        const maxX1 = Math.max(...xCoords1);
-        const minZ1 = Math.min(...zCoords1);
-        const maxZ1 = Math.max(...zCoords1);
-
-        const xCoords2 = room2.floor_polygon.map((p) => p.x);
-        const zCoords2 = room2.floor_polygon.map((p) => p.z);
-        const minX2 = Math.min(...xCoords2);
-        const maxX2 = Math.max(...xCoords2);
-        const minZ2 = Math.min(...zCoords2);
-        const maxZ2 = Math.max(...zCoords2);
-
-        const boxesOverlap = !(
-          maxX1 <= minX2 ||
-          minX1 >= maxX2 ||
-          maxZ1 <= minZ2 ||
-          minZ1 >= maxZ2
-        );
-
-        if (!boxesOverlap) continue;
-
-        if (doPolygonsIntersect(room1.floor_polygon, room2.floor_polygon)) {
-          overlaps.push([room1.id, room2.id]);
-        }
-      }
-    }
-
-    return overlaps;
-  };
-
-  const saveFloorPlan = () => {
-    console.log("Floor plan data:", JSON.stringify(floorPlanData));
-    alert("Floor plan saved! Check console for data.");
-    setHasChanges(false);
-  };
-
-  const undoChanges = () => {
-    setFloorPlanData(initialFloorPlanData);
-    setSelectedRoomId(null);
-    setHasChanges(false);
-  };
-
-  const getOverlappingRoomNames = () => {
-    const roomNamePairs = overlappingRooms.map(([id1, id2]) => {
-      const room1 = floorPlanData.rooms.find((r) => r.id === id1);
-      const room2 = floorPlanData.rooms.find((r) => r.id === id2);
-      return `${room1?.room_type} and ${room2?.room_type}`;
-    });
-
-    if (roomNamePairs.length === 1) {
-      return roomNamePairs[0];
-    } else if (roomNamePairs.length === 2) {
-      return `${roomNamePairs[0]}, ${roomNamePairs[1]}`;
-    } else if (roomNamePairs.length > 2) {
-      return `${roomNamePairs.slice(0, 2).join(", ")} and ${
-        roomNamePairs.length - 2
-      } more`;
-    }
-    return "";
-  };
-
-  const isRoomOverlapping = (roomId: string) => {
-    return overlappingRooms.some((pair) => pair.includes(roomId));
+  const getOverlappingRoomNamesHelper = () => {
+    return getOverlappingRoomNames(overlappingRooms, getRoomType);
   };
 
   return (
     <div>
-      {renderOverlapAlert()}
+      {renderOverlapAlert({
+        overlappingRooms,
+        getOverlappingRoomNames: getOverlappingRoomNamesHelper,
+      })}
 
       <div>
-        <style>{styles}</style>
+        <style>{floorPlanStyles}</style>
 
         <div
           ref={floorPlanRef}
@@ -1055,6 +364,13 @@ export default function InteractiveFloorPlan({
           <p style={{ textAlign: "center", marginBottom: "-30px" }}>
             <b>Total Area:</b> {floorPlanData.total_area.toFixed(2)} m²
             &nbsp;|&nbsp; <b>Total Rooms:</b> {floorPlanData.room_count}
+            {hasUndoState && !isMobile && (
+              <span
+                style={{ fontSize: "0.8em", marginLeft: "10px", color: "#666" }}
+              >
+                (Ctrl+Z to undo last change)
+              </span>
+            )}
           </p>
 
           <svg
@@ -1177,10 +493,18 @@ export default function InteractiveFloorPlan({
 
               const centroid = calculateRoomCentroid(transformedPoints);
 
-              const isOverlapping = isRoomOverlapping(room.id);
+              const isOverlapping = isRoomOverlapping(
+                room.id,
+                overlappingRooms
+              );
 
               return (
-                <g key={room.id}>
+                <g
+                  key={room.id}
+                  transform={`rotate(${roomRotations[room.id] || 0}, ${
+                    centroid.x
+                  }, ${centroid.y})`}
+                >
                   <polygon
                     id={room.id}
                     className={`room-polygon ${
@@ -1191,9 +515,34 @@ export default function InteractiveFloorPlan({
                       roomColors[room.room_type as keyof typeof roomColors] ||
                       "#E8E8E8"
                     }
-                    onClick={(e) => handleRoomClick(room.id, e)}
-                    onMouseDown={(e) => handleMouseDown(e, room.id)}
-                    onTouchStart={(e) => handleTouchStart(e, room.id)}
+                    onClick={(e) =>
+                      handleRoomClick(
+                        room.id,
+                        e,
+                        selectedRoomId,
+                        setSelectedRoomId
+                      )
+                    }
+                    onMouseDown={(e) =>
+                      handleMouseDownWithHistory(
+                        e,
+                        room.id,
+                        svgRef,
+                        setDragState,
+                        setHasChanges,
+                        setSelectedRoomId
+                      )
+                    }
+                    onTouchStart={(e) =>
+                      handleTouchStartWithHistory(
+                        e,
+                        room.id,
+                        svgRef,
+                        setDragState,
+                        setHasChanges,
+                        setSelectedRoomId
+                      )
+                    }
                   />
 
                   {selectedRoomId === room.id &&
@@ -1205,13 +554,89 @@ export default function InteractiveFloorPlan({
                         r={6}
                         className="resize-handle"
                         onMouseDown={(e) =>
-                          handleVertexMouseDown(e, room.id, index)
+                          handleVertexMouseDownWithHistory(
+                            e,
+                            room.id,
+                            index,
+                            svgRef,
+                            setDragState,
+                            setSelectedRoomId,
+                            setHasChanges
+                          )
                         }
                         onTouchStart={(e) =>
-                          handleVertexTouchStart(e, room.id, index)
+                          handleVertexTouchStartWithHistory(
+                            e,
+                            room.id,
+                            index,
+                            svgRef,
+                            setDragState,
+                            setSelectedRoomId,
+                            setHasChanges
+                          )
                         }
                       />
                     ))}
+
+                  {selectedRoomId === room.id && (
+                    <foreignObject
+                      x={centroid.x - (isMobile ? 8 : 15)}
+                      y={centroid.y - (isMobile ? 8 : 15)}
+                      width={isMobile ? "20" : "30"}
+                      height={isMobile ? "20" : "30"}
+                    >
+                      <button
+                        className="rotate-button"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const direction =
+                            e.ctrlKey || e.metaKey || e.altKey
+                              ? "left"
+                              : "right";
+                          handleRotateRoomWithHistory(
+                            room.id,
+                            direction,
+                            roomRotations,
+                            setRoomRotations,
+                            setHasChanges,
+                            checkAndUpdateOverlaps
+                          );
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleRotateRoomWithHistory(
+                            room.id,
+                            "left",
+                            roomRotations,
+                            setRoomRotations,
+                            setHasChanges,
+                            checkAndUpdateOverlaps
+                          );
+                        }}
+                        style={{
+                          width: isMobile ? "25px" : "40px",
+                          height: isMobile ? "25px" : "40px",
+                          position: "relative",
+                          right: isMobile ? "8px" : "12px",
+                          borderRadius: "50%",
+                          zIndex: "100",
+                          background: "transparent",
+                          color: "green",
+                          fontWeight: "bolder",
+                          fontSize: isMobile ? "20px" : "35px",
+                          border: "none",
+                          cursor: "pointer",
+                        }}
+                        title="Left-click to rotate clockwise, Right-click to rotate counter-clockwise"
+                      >
+                        <b>↻</b>
+                      </button>
+                    </foreignObject>
+                  )}
 
                   <text
                     className="room-label room-name"
@@ -1262,15 +687,34 @@ export default function InteractiveFloorPlan({
                 position: "fixed",
                 display: "flex",
                 gap: "10px",
-                width:"80%", 
-                bottom:"80",
-              
+                width: "80%",
+                bottom: "80",
                 left: leftPosition,
-                pointerEvents:"auto"
+                pointerEvents: "auto",
               }}
             >
-              <button className="save-button" onClick={saveFloorPlan}>Save Floor Plan</button>
-              <button className="undo-button" onClick={undoChanges}>Undo Changes</button>
+              <button
+                className="save-button"
+                onClick={() =>
+                  saveFloorPlan(floorPlanData, roomRotations, setHasChanges)
+                }
+              >
+                Save Floor Plan
+              </button>
+              <button
+                className="undo-button"
+                onClick={() =>
+                  handleUndoChanges(
+                    initialFloorPlanData,
+                    setFloorPlanData,
+                    setSelectedRoomId,
+                    setHasChanges,
+                    setRoomRotations
+                  )
+                }
+              >
+                Reset Changes
+              </button>
             </div>
           )}
         </div>
