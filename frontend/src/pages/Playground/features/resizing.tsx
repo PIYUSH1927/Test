@@ -309,10 +309,9 @@ export function handleTouchStart(
         return [...prev, roomId];
       }
     });
-    event.preventDefault(); // Prevent normal touch behavior
-    return; // Don't proceed with normal touch handling
   }
 
+  // ALWAYS set the drag state - don't return early
   setDragState({
     active: true,
     roomId,
