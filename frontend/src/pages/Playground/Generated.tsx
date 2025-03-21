@@ -765,9 +765,9 @@ export default function InteractiveFloorPlan({
                         onClick={(e) => {
                           e.stopPropagation();
                           const direction =
-                            e.ctrlKey || e.metaKey || e.altKey
-                              ? "left"
-                              : "right";
+                          (navigator.platform.indexOf("Mac") !== -1 ? e.metaKey : (e.ctrlKey || e.metaKey)) || e.altKey
+                            ? "left"
+                            : "right";
 
                           if (selectedRoomIds.length > 1) {
                             rotateAllSelectedRooms(direction);

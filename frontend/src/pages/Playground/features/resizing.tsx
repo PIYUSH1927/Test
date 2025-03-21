@@ -263,19 +263,16 @@ export function handleTouchStart(
   const touchX = touch.clientX - svgRect.left;
   const touchY = touch.clientY - svgRect.top;
 
-  // Simple selection: if the room is already selected, keep it selected
-  // Otherwise, add it to selection (for multi-select)
   if (selectedRoomIds.length > 0) {
-    // Already have selections, add this room if it's not already selected
+ 
     if (!selectedRoomIds.includes(roomId)) {
       setSelectedRoomIds([...selectedRoomIds, roomId]);
     }
   } else {
-    // First selection
+ 
     setSelectedRoomIds([roomId]);
   }
 
-  // Always set the drag state
   setDragState({
     active: true,
     roomId,
@@ -537,10 +534,8 @@ export function handleTouchMove(
 
   event.stopPropagation();
 
-  // Get initial touch positions
   const touch = event.touches[0];
   
-  // Check if the touch has moved significantly - if so, cancel longpress
   const initialTouchX = touch.clientX;
   const initialTouchY = touch.clientY;
   const initialDeltaX = initialTouchX - dragState.startX;
@@ -559,14 +554,12 @@ export function handleTouchMove(
   const deltaX = touchX - dragState.lastX;
   const deltaY = touchY - dragState.lastY;
 
-  // Calculate total delta from start position for group resizing calculations
   const totalDeltaX = touchX - dragState.startX;
   const totalDeltaY = touchY - dragState.startY;
 
   if (Math.abs(deltaX) < 0.1 && Math.abs(deltaY) < 0.1) return;
 
   if (!dragState.isResizing) {
-    // Handle movement (already supports groups)
     updateMultipleRoomPositions(
       dragState,
       touchX,
@@ -581,7 +574,6 @@ export function handleTouchMove(
       setDragState
     );
   } else if (dragState.isGroupOperation && dragState.initialPolygons) {
-    // Handle group resizing
     updateGroupRoomResize(
       dragState,
       touchX,
@@ -596,7 +588,6 @@ export function handleTouchMove(
       setDragState
     );
   } else {
-    // Handle single room resizing
     updateRoomResize(
       dragState,
       touchX,

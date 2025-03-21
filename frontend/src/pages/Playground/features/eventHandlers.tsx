@@ -181,7 +181,6 @@ export function handleRoomSelection(
 ) {
   event.stopPropagation();
 
-  // For mouse events, use ctrl/cmd key for multi-select
   if ("ctrlKey" in event) {
     const isMultiSelectMode = event.ctrlKey || event.metaKey;
     
@@ -197,15 +196,13 @@ export function handleRoomSelection(
       setSelectedRoomIds([roomId]);
     }
   } 
-  // For touch events, just add to the selection
+
   else if ("touches" in event) {
     if (selectedRoomIds.length > 0) {
-      // Already have selections, add this room if it's not already selected
       if (!selectedRoomIds.includes(roomId)) {
         setSelectedRoomIds([...selectedRoomIds, roomId]);
       }
     } else {
-      // First selection
       setSelectedRoomIds([roomId]);
     }
   }
