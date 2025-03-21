@@ -41,13 +41,14 @@ type SVGRef = RefObject<SVGSVGElement | null>;
 
 let longPressTimer: number | null = null;
 let isLongPress = false;
-const LONG_PRESS_DURATION = 100;
+const LONG_PRESS_DURATION = 500;
 
 export function setupLongPress(
   event: React.TouchEvent,
   roomId: string,
   callback: () => void
 ) {
+
   if (longPressTimer) {
     window.clearTimeout(longPressTimer);
   }
@@ -287,7 +288,20 @@ export function handleTouchStart(
   const touchX = touch.clientX - svgRect.left;
   const touchY = touch.clientY - svgRect.top;
 
-  setupLongPress(event, roomId, () => {
+  // Only set up longpress behavior if not already in multi-select mode
+  if (!isLongPress) {
+    setupLongPress(event, roomId, () => {
+      // When long press is detected, toggle selection
+      setSelectedRoomIds((prev) => {
+        if (prev.includes(roomId)) {
+          return prev.filter((id) => id !== roomId);
+        } else {
+          return [...prev, roomId];
+        }
+      });
+    });
+  } else {
+    // Already in multi-select mode, toggle room selection
     setSelectedRoomIds((prev) => {
       if (prev.includes(roomId)) {
         return prev.filter((id) => id !== roomId);
@@ -295,7 +309,9 @@ export function handleTouchStart(
         return [...prev, roomId];
       }
     });
-  });
+    event.preventDefault(); // Prevent normal touch behavior
+    return; // Don't proceed with normal touch handling
+  }
 
   setDragState({
     active: true,
@@ -315,6 +331,7 @@ export function handleTouchStart(
 
   setHasChanges(true);
 }
+
 
 export function handleVertexTouchStart(
   event: React.TouchEvent,
@@ -538,6 +555,8 @@ export function handleMouseMove(
   }
 }
 
+// Updated handleTouchMove function that fixes the variable reassignment errors
+
 export function handleTouchMove(
   event: TouchEvent,
   dragState: DragState,
@@ -559,14 +578,24 @@ export function handleTouchMove(
 
   event.stopPropagation();
 
-  if (longPressTimer) {
-    window.clearTimeout(longPressTimer);
-    longPressTimer = null;
+  // Get initial touch positions
+  const touch = event.touches[0];
+  
+  // Check if the touch has moved significantly - if so, cancel longpress
+  const initialTouchX = touch.clientX;
+  const initialTouchY = touch.clientY;
+  const initialDeltaX = initialTouchX - dragState.startX;
+  const initialDeltaY = initialTouchY - dragState.startY;
+  
+  if (Math.abs(initialDeltaX) > 5 || Math.abs(initialDeltaY) > 5) {
+    if (longPressTimer) {
+      window.clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
   }
 
   if (event.touches.length !== 1) return;
 
-  const touch = event.touches[0];
   const svgElement = svgRef.current;
   if (!svgElement) return;
 
@@ -577,12 +606,14 @@ export function handleTouchMove(
   const deltaX = touchX - dragState.lastX;
   const deltaY = touchY - dragState.lastY;
 
+  // Calculate total delta from start position for group resizing calculations
   const totalDeltaX = touchX - dragState.startX;
   const totalDeltaY = touchY - dragState.startY;
 
   if (Math.abs(deltaX) < 0.1 && Math.abs(deltaY) < 0.1) return;
 
   if (!dragState.isResizing) {
+    // Handle movement (already supports groups)
     updateMultipleRoomPositions(
       dragState,
       touchX,
@@ -597,6 +628,7 @@ export function handleTouchMove(
       setDragState
     );
   } else if (dragState.isGroupOperation && dragState.initialPolygons) {
+    // Handle group resizing
     updateGroupRoomResize(
       dragState,
       touchX,
@@ -611,6 +643,7 @@ export function handleTouchMove(
       setDragState
     );
   } else {
+    // Handle single room resizing
     updateRoomResize(
       dragState,
       touchX,
@@ -861,27 +894,20 @@ export function renderEdgeHandles(
   return edgeHandles;
 }
 
+
 export function handleTouchEnd(
   setDragState: React.Dispatch<React.SetStateAction<DragState>>,
   checkAndUpdateOverlaps: () => boolean | void
 ) {
   document.body.removeAttribute("data-room-touch-interaction");
 
+  // Clear long press timer on touch end
   if (longPressTimer) {
     window.clearTimeout(longPressTimer);
     longPressTimer = null;
   }
-
-  setTimeout(() => {
-    isLongPress = false;
-
-    const highlightedElements = document.getElementsByClassName(
-      "long-press-highlight"
-    );
-    Array.from(highlightedElements).forEach((el) => {
-      el.classList.remove("long-press-highlight");
-    });
-  }, 50);
+  
+  // Don't reset isLongPress immediately - this allows for multiple selections
 
   setDragState({
     active: false,
@@ -896,11 +922,12 @@ export function handleTouchEnd(
     isResizing: false,
     isEdgeResizing: false,
     isGroupOperation: false,
-    initialPolygons: undefined,
+    initialPolygons: undefined
   });
 
   checkAndUpdateOverlaps();
 }
+
 
 function updateMultipleRoomPositions(
   dragState: DragState,

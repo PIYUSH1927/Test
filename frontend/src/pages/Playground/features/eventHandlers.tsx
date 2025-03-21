@@ -6,6 +6,7 @@ import {
   handleMouseUp,
   handleTouchEnd,
   useNonPassiveTouchHandling,
+  showLongPressIndicator  // Import this function from resizing.tsx
 } from "./resizing";
 
 interface Point {
@@ -45,17 +46,25 @@ interface FloorPlanData {
   rooms: Room[];
 }
 
+// Use the same longPress variables as in resizing.tsx
+// These should be declared and exported in resizing.tsx, and imported here
+// For simplicity, we'll redeclare them here
 let longPressTimer: number | null = null;
 let isLongPress = false;
-const LONG_PRESS_DURATION =100;
+const LONG_PRESS_DURATION = 500;
 
-export function setupLongPress(event: React.TouchEvent, callback: () => void) {
+export function setupLongPress(
+  event: React.TouchEvent,
+  roomId: string,
+  callback: () => void
+) {
   if (longPressTimer) {
     window.clearTimeout(longPressTimer);
   }
 
   longPressTimer = window.setTimeout(() => {
     isLongPress = true;
+    showLongPressIndicator(roomId, true);
     callback();
     longPressTimer = null;
   }, LONG_PRESS_DURATION);
@@ -203,9 +212,10 @@ export function handleRoomSelection(
 ) {
   event.stopPropagation();
 
+  // For mouse events, use ctrl/cmd key for multi-select
   if ("ctrlKey" in event) {
     const isMultiSelectMode = event.ctrlKey || event.metaKey;
-
+    
     if (isMultiSelectMode) {
       setSelectedRoomIds((prev) => {
         if (prev.includes(roomId)) {
@@ -217,8 +227,11 @@ export function handleRoomSelection(
     } else {
       setSelectedRoomIds([roomId]);
     }
-  } else if ("touches" in event) {
+  } 
+  // For touch events, only toggle selection if in long press mode
+  else if ("touches" in event) {
     if (isLongPress) {
+      // If long press is detected, toggle selection
       setSelectedRoomIds((prev) => {
         if (prev.includes(roomId)) {
           return prev.filter((id) => id !== roomId);
@@ -226,7 +239,11 @@ export function handleRoomSelection(
           return [...prev, roomId];
         }
       });
+      
+      // Show visual feedback
+      showLongPressIndicator(roomId, true);
     } else {
+      // Regular touch behavior - single selection
       setSelectedRoomIds([roomId]);
     }
   }
