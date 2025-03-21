@@ -6,7 +6,6 @@ import {
   handleMouseUp,
   handleTouchEnd,
   useNonPassiveTouchHandling,
-  showLongPressIndicator  // Import this function from resizing.tsx
 } from "./resizing";
 
 interface Point {
@@ -46,36 +45,6 @@ interface FloorPlanData {
   rooms: Room[];
 }
 
-// Use the same longPress variables as in resizing.tsx
-// These should be declared and exported in resizing.tsx, and imported here
-// For simplicity, we'll redeclare them here
-let longPressTimer: number | null = null;
-let isLongPress = false;
-const LONG_PRESS_DURATION = 500;
-
-export function setupLongPress(
-  event: React.TouchEvent,
-  roomId: string,
-  callback: () => void
-) {
-  if (longPressTimer) {
-    window.clearTimeout(longPressTimer);
-  }
-
-  longPressTimer = window.setTimeout(() => {
-    isLongPress = true;
-    showLongPressIndicator(roomId, true);
-    callback();
-    longPressTimer = null;
-  }, LONG_PRESS_DURATION);
-}
-
-export function cancelLongPress() {
-  if (longPressTimer) {
-    window.clearTimeout(longPressTimer);
-    longPressTimer = null;
-  }
-}
 
 export function useEventHandlers(
   dragState: DragState,
@@ -228,22 +197,15 @@ export function handleRoomSelection(
       setSelectedRoomIds([roomId]);
     }
   } 
-  // For touch events, only toggle selection if in long press mode
+  // For touch events, just add to the selection
   else if ("touches" in event) {
-    if (isLongPress) {
-      // If long press is detected, toggle selection
-      setSelectedRoomIds((prev) => {
-        if (prev.includes(roomId)) {
-          return prev.filter((id) => id !== roomId);
-        } else {
-          return [...prev, roomId];
-        }
-      });
-      
-      // Show visual feedback
-      showLongPressIndicator(roomId, true);
+    if (selectedRoomIds.length > 0) {
+      // Already have selections, add this room if it's not already selected
+      if (!selectedRoomIds.includes(roomId)) {
+        setSelectedRoomIds([...selectedRoomIds, roomId]);
+      }
     } else {
-      // Regular touch behavior - single selection
+      // First selection
       setSelectedRoomIds([roomId]);
     }
   }

@@ -39,34 +39,9 @@ interface DragState {
 
 type SVGRef = RefObject<SVGSVGElement | null>;
 
-let longPressTimer: number | null = null;
-let isLongPress = false;
-const LONG_PRESS_DURATION = 500;
 
-export function setupLongPress(
-  event: React.TouchEvent,
-  roomId: string,
-  callback: () => void
-) {
 
-  if (longPressTimer) {
-    window.clearTimeout(longPressTimer);
-  }
 
-  longPressTimer = window.setTimeout(() => {
-    isLongPress = true;
-    showLongPressIndicator(roomId, true);
-    callback();
-    longPressTimer = null;
-  }, LONG_PRESS_DURATION);
-}
-
-export function cancelLongPress() {
-  if (longPressTimer) {
-    window.clearTimeout(longPressTimer);
-    longPressTimer = null;
-  }
-}
 
 export function showLongPressIndicator(roomId: string, show: boolean) {
   const roomElement = document.getElementById(roomId);
@@ -288,30 +263,19 @@ export function handleTouchStart(
   const touchX = touch.clientX - svgRect.left;
   const touchY = touch.clientY - svgRect.top;
 
-  // Only set up longpress behavior if not already in multi-select mode
-  if (!isLongPress) {
-    setupLongPress(event, roomId, () => {
-      // When long press is detected, toggle selection
-      setSelectedRoomIds((prev) => {
-        if (prev.includes(roomId)) {
-          return prev.filter((id) => id !== roomId);
-        } else {
-          return [...prev, roomId];
-        }
-      });
-    });
+  // Simple selection: if the room is already selected, keep it selected
+  // Otherwise, add it to selection (for multi-select)
+  if (selectedRoomIds.length > 0) {
+    // Already have selections, add this room if it's not already selected
+    if (!selectedRoomIds.includes(roomId)) {
+      setSelectedRoomIds([...selectedRoomIds, roomId]);
+    }
   } else {
-    // Already in multi-select mode, toggle room selection
-    setSelectedRoomIds((prev) => {
-      if (prev.includes(roomId)) {
-        return prev.filter((id) => id !== roomId);
-      } else {
-        return [...prev, roomId];
-      }
-    });
+    // First selection
+    setSelectedRoomIds([roomId]);
   }
 
-  // ALWAYS set the drag state - don't return early
+  // Always set the drag state
   setDragState({
     active: true,
     roomId,
@@ -356,8 +320,6 @@ export function handleVertexTouchStart(
   const svgRect = svgElement.getBoundingClientRect();
   const touchX = touch.clientX - svgRect.left;
   const touchY = touch.clientY - svgRect.top;
-
-  cancelLongPress();
 
   const initialPolygons: Record<string, Point[]> = {};
   const roomIds = selectedRoomIds.includes(roomId) ? selectedRoomIds : [roomId];
@@ -417,8 +379,6 @@ export function handleEdgeTouchStart(
   const svgRect = svgElement.getBoundingClientRect();
   const touchX = touch.clientX - svgRect.left;
   const touchY = touch.clientY - svgRect.top;
-
-  cancelLongPress();
 
   const initialPolygons: Record<string, Point[]> = {};
   const roomIds = selectedRoomIds.includes(roomId) ? selectedRoomIds : [roomId];
@@ -586,12 +546,6 @@ export function handleTouchMove(
   const initialDeltaX = initialTouchX - dragState.startX;
   const initialDeltaY = initialTouchY - dragState.startY;
   
-  if (Math.abs(initialDeltaX) > 5 || Math.abs(initialDeltaY) > 5) {
-    if (longPressTimer) {
-      window.clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  }
 
   if (event.touches.length !== 1) return;
 
@@ -900,13 +854,6 @@ export function handleTouchEnd(
 ) {
   document.body.removeAttribute("data-room-touch-interaction");
 
-  // Clear long press timer on touch end
-  if (longPressTimer) {
-    window.clearTimeout(longPressTimer);
-    longPressTimer = null;
-  }
-  
-  // Don't reset isLongPress immediately - this allows for multiple selections
 
   setDragState({
     active: false,
