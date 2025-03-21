@@ -23,14 +23,14 @@ interface Point {
     room_count: 8,
     total_area: 62.57,
     room_types: [
-      "SecondRoom",
-      "MasterRoom",
-      "Bathroom",
-      "LivingRoom",
-      "Balcony",
-      "Kitchen",
-      "Balcony",
-      "Balcony",
+        "MasterRoom",
+        "LivingRoom",
+        "ChildRoom",
+        "Kitchen",
+        "Bathroom",
+        "Balcony",
+        "Balcony",
+        "Balcony"
     ],
     rooms: [
       {

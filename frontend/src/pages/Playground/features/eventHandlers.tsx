@@ -1,11 +1,11 @@
 // features/eventHandlers.tsx
 import React, { useCallback, RefObject, useEffect } from "react";
-import { 
-  handleMouseMove, 
-  handleTouchMove, 
-  handleMouseUp, 
-  handleTouchEnd, 
-  useNonPassiveTouchHandling 
+import {
+  handleMouseMove,
+  handleTouchMove,
+  handleMouseUp,
+  handleTouchEnd,
+  useNonPassiveTouchHandling,
 } from "./resizing";
 
 interface Point {
@@ -16,14 +16,17 @@ interface Point {
 interface DragState {
   active: boolean;
   roomId: string | null;
+  roomIds: string[];
   vertexIndex: number | null;
-  edgeIndices: number[] | null; 
+  edgeIndices: number[] | null;
   startX: number;
   startY: number;
   lastX: number;
   lastY: number;
   isResizing: boolean;
-  isEdgeResizing: boolean; 
+  isEdgeResizing: boolean;
+  isGroupOperation: boolean;
+  initialPolygons?: Record<string, Point[]>;
 }
 
 interface Room {
@@ -42,18 +45,46 @@ interface FloorPlanData {
   rooms: Room[];
 }
 
+let longPressTimer: number | null = null;
+let isLongPress = false;
+const LONG_PRESS_DURATION = 500;
+
+export function setupLongPress(event: React.TouchEvent, callback: () => void) {
+  if (longPressTimer) {
+    window.clearTimeout(longPressTimer);
+  }
+
+  longPressTimer = window.setTimeout(() => {
+    isLongPress = true;
+    callback();
+    longPressTimer = null;
+  }, LONG_PRESS_DURATION);
+}
+
+export function cancelLongPress() {
+  if (longPressTimer) {
+    window.clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+}
+
 export function useEventHandlers(
   dragState: DragState,
   svgRef: RefObject<SVGSVGElement>,
   scale: number,
-  reverseTransformCoordinates: (x: number, y: number) => { x: number; z: number },
-  calculateRoomDimensions: (polygon: Point[]) => { width: number; height: number },
+  reverseTransformCoordinates: (
+    x: number,
+    y: number
+  ) => { x: number; z: number },
+  calculateRoomDimensions: (polygon: Point[]) => {
+    width: number;
+    height: number;
+  },
   calculateRoomArea: (polygon: Point[]) => number,
   setFloorPlanData: React.Dispatch<React.SetStateAction<FloorPlanData>>,
   setDragState: React.Dispatch<React.SetStateAction<DragState>>,
   checkAndUpdateOverlaps: () => boolean | void
 ) {
-  // Add non-passive touch handling
   useNonPassiveTouchHandling(svgRef);
 
   const handleMouseMoveCallback = useCallback(
@@ -70,7 +101,14 @@ export function useEventHandlers(
         setDragState
       );
     },
-    [dragState, reverseTransformCoordinates, scale, calculateRoomDimensions, calculateRoomArea, setFloorPlanData]
+    [
+      dragState,
+      reverseTransformCoordinates,
+      scale,
+      calculateRoomDimensions,
+      calculateRoomArea,
+      setFloorPlanData,
+    ]
   );
 
   const handleTouchMoveCallback = useCallback(
@@ -87,7 +125,14 @@ export function useEventHandlers(
         setDragState
       );
     },
-    [dragState, reverseTransformCoordinates, scale, calculateRoomDimensions, calculateRoomArea, setFloorPlanData]
+    [
+      dragState,
+      reverseTransformCoordinates,
+      scale,
+      calculateRoomDimensions,
+      calculateRoomArea,
+      setFloorPlanData,
+    ]
   );
 
   const handleMouseUpCallback = useCallback(() => {
@@ -99,18 +144,19 @@ export function useEventHandlers(
   }, [checkAndUpdateOverlaps, setDragState]);
 
   useEffect(() => {
-    const preventDefaultTouchMove = (e: TouchEvent) => {
-      if (dragState.active) {
+    const preventScroll = (e: TouchEvent) => {
+      if (
+        dragState.active ||
+        document.body.hasAttribute("data-room-touch-interaction")
+      ) {
         e.preventDefault();
       }
     };
 
-    document.addEventListener("touchmove", preventDefaultTouchMove, {
-      passive: false,
-    });
+    document.addEventListener("touchmove", preventScroll, { passive: false });
 
     return () => {
-      document.removeEventListener("touchmove", preventDefaultTouchMove);
+      document.removeEventListener("touchmove", preventScroll);
     };
   }, [dragState.active]);
 
@@ -145,19 +191,43 @@ export function useEventHandlers(
     handleMouseMoveCallback,
     handleTouchMoveCallback,
     handleMouseUpCallback,
-    handleTouchEndCallback
+    handleTouchEndCallback,
   };
 }
 
-export function handleRoomClick(
+export function handleRoomSelection(
   roomId: string,
   event: React.MouseEvent | React.TouchEvent,
-  selectedRoomId: string | null,
-  setSelectedRoomId: React.Dispatch<React.SetStateAction<string | null>>
+  selectedRoomIds: string[],
+  setSelectedRoomIds: React.Dispatch<React.SetStateAction<string[]>>
 ) {
   event.stopPropagation();
 
-  if (roomId !== selectedRoomId) {
-    setSelectedRoomId(roomId);
+  if ("ctrlKey" in event) {
+    const isMultiSelectMode = event.ctrlKey || event.metaKey;
+
+    if (isMultiSelectMode) {
+      setSelectedRoomIds((prev) => {
+        if (prev.includes(roomId)) {
+          return prev.filter((id) => id !== roomId);
+        } else {
+          return [...prev, roomId];
+        }
+      });
+    } else {
+      setSelectedRoomIds([roomId]);
+    }
+  } else if ("touches" in event) {
+    if (isLongPress) {
+      setSelectedRoomIds((prev) => {
+        if (prev.includes(roomId)) {
+          return prev.filter((id) => id !== roomId);
+        } else {
+          return [...prev, roomId];
+        }
+      });
+    } else {
+      setSelectedRoomIds([roomId]);
+    }
   }
 }

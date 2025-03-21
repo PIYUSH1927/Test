@@ -27,22 +27,38 @@ export const floorPlanStyles = `
   transition: all 0.2s ease;
   stroke-linejoin: miter; 
   shape-rendering: crispEdges;
-  touch-action: none; 
+  touch-action: none !important; 
 }
 
 svg {
   vector-effect: non-scaling-stroke;
-  touch-action: none; 
+  touch-action: none !important; 
 }
 
 .floor-plan-container {
-  touch-action: none;
+  touch-action: none !important;
 }
 
+/* Updated selection styles */
 .room-polygon.selected {
   fill: rgba(224, 224, 255, 0.8);
   stroke: #0000ff;
   stroke-width: 4px; 
+  filter: drop-shadow(0px 0px 3px rgba(0, 0, 255, 0.3));
+}
+
+/* Style for first selected room (primary selection) */
+.room-polygon.primary-selection {
+  stroke: #1e88e5;
+  stroke-width: 4px;
+  filter: drop-shadow(0px 0px 5px rgba(30, 136, 229, 0.5));
+}
+
+/* Secondary selection style */
+.room-polygon.secondary-selection {
+  stroke: #0000ff;
+  stroke-width: 3px;
+  stroke-dasharray: 0;
 }
 
 .room-polygon.overlapping {
@@ -51,18 +67,40 @@ svg {
   stroke-dasharray: 5,5;
 }
 
+/* Multi-selection indicator */
+.multi-select-indicator {
+  fill: rgba(66, 133, 244, 0.1);
+  stroke: #4285F4;
+  stroke-width: 1px;
+  stroke-dasharray: 5,3;
+  pointer-events: none;
+}
+
+/* Group selection count badge */
+.selection-badge {
+  fill: #4285F4;
+  stroke: white;
+  stroke-width: 1px;
+  font-size: 12px;
+  font-weight: bold;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
 /* Edge handle styles */
 .resize-edge {
   cursor: move;
-  stroke-opacity: 0;
-  transition: stroke-width 0.2s;
+  stroke-opacity: 0.1; /* Always slightly visible */
+  transition: stroke-opacity 0.2s;
+  touch-action: none !important;
 }
 
 .resize-edge:hover {
-  stroke-opacity: 0.2;
+  stroke-opacity: 0.3;
   stroke: #0000ff;
 }
 
+/* Edge indicators */
 .edge-indicator {
   stroke-opacity: 0;
   transition: stroke-opacity 0.2s ease-in-out;
@@ -81,6 +119,7 @@ svg {
   stroke: black;
   stroke-width: 2px;
   cursor: nwse-resize;
+  touch-action: none !important;
 }
 
 .resize-handle:hover {
@@ -139,7 +178,6 @@ button {
 .save-button {
   background-color: #4CAF50;
   color: white;
-
 }
 
 .save-button:hover {
@@ -175,7 +213,56 @@ button {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   pointer-events: none;
 }
-  
+
+/* Multi-selection toolbar */
+.selection-toolbar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  padding: 8px 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 1000;
+}
+
+.selection-count {
+  font-weight: bold;
+  color: #4285F4;
+  margin-right: 8px;
+}
+
+.selection-action-button {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.selection-action-button.group {
+  background-color: #4285F4;
+  color: white;
+}
+
+.selection-action-button.ungroup {
+  background-color: #EA4335;
+  color: white;
+}
+
+.selection-action-button:hover {
+  filter: brightness(1.1);
+}
+
+.selection-action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 @media (max-width: 850px) {
   .room-label {
@@ -185,17 +272,44 @@ button {
   .room-name {
     font-size: 10px !important;
   }
-
+  
+  /* Improve touch targets for mobile */
   .resize-handle {
-    r: 5;
+    r: 8 !important; /* Bigger radius for touch */
   }
   
   .resize-edge {
-    stroke-width: 10;
+    stroke-width: 20 !important; /* Much wider to make it easier to tap */
+    stroke-opacity: 0.15 !important; /* More visible on mobile */
   }
   
   .edge-indicator {
-    stroke-width: 2;
+    stroke-width: 3 !important;
+    stroke-opacity: 0.6 !important; /* More visible on mobile */
   }
+  
+  .room-polygon {
+    stroke-width: 4px !important; /* More visible on mobile */
+  }
+  
+  .selection-toolbar {
+    padding: 6px 12px;
+  }
+  
+  .selection-action-button {
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+}
+  .room-polygon.long-press-highlight {
+  filter: brightness(1.1) drop-shadow(0 0 8px rgba(255, 255, 0, 0.8));
+  stroke: #FFD700;
+  stroke-width: 3;
+  animation: pulse 0.5s infinite alternate;
+}
+
+@keyframes pulse {
+  from { filter: brightness(1.1) drop-shadow(0 0 8px rgba(255, 255, 0, 0.8)); }
+  to { filter: brightness(1.2) drop-shadow(0 0 12px rgba(255, 255, 0, 0.9)); }
 }
 `;

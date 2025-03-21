@@ -33,12 +33,9 @@ const Playground = () => {
 
   const [touchStartDistance, setTouchStartDistance] = useState(0);
 
-  // Prevent browser zoom with meta keys (Ctrl/Cmd)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check if Ctrl or Cmd key is pressed
       if (e.ctrlKey || e.metaKey) {
-        // Look for specific key combinations that trigger browser zoom
         if (e.key === "+" || e.key === "-" || e.key === "=") {
           e.preventDefault();
         }
@@ -51,21 +48,18 @@ const Playground = () => {
     };
   }, []);
 
-  // Handle wheel events for custom zoom
+
   useEffect(() => {
     const targetElement = containerRef.current;
     if (!targetElement) return;
 
     const handleWheel = (e: WheelEvent) => {
       if (isModalOpen) return;
-
-      // Only handle zoom when Ctrl key is pressed
       if (e.ctrlKey) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
         setScale((prevScale) => Math.min(Math.max(0.1, prevScale * delta), 20));
       } else {
-        // Normal scrolling for panning
         setPosition((prev) => ({
           x: prev.x - e.deltaX,
           y: prev.y - e.deltaY,
@@ -73,7 +67,6 @@ const Playground = () => {
       }
     };
 
-    // We need to use the non-passive listener to call preventDefault
     targetElement.addEventListener('wheel', handleWheel, { passive: false });
     
     return () => {
@@ -163,10 +156,9 @@ const Playground = () => {
     }
   }, [scale, isDragging, lastMousePosition, touchStartDistance, isModalOpen]);
 
-  // We're now handling wheel events in the useEffect above, so this is just a dummy function
+
   const handleWheel = (e: React.WheelEvent) => {
-    // The actual logic is handled in the useEffect with the non-passive listener
-    // This is just to handle React synthetic events if needed
+
   };
 
   const toggleDropdown = (index: number) => {
