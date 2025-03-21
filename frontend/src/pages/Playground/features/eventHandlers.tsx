@@ -47,7 +47,7 @@ interface FloorPlanData {
 
 let longPressTimer: number | null = null;
 let isLongPress = false;
-const LONG_PRESS_DURATION = 500;
+const LONG_PRESS_DURATION =100;
 
 export function setupLongPress(event: React.TouchEvent, callback: () => void) {
   if (longPressTimer) {

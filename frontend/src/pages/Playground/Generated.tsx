@@ -94,7 +94,7 @@ export default function InteractiveFloorPlan({
 
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
-  const [scale, setScale] = useState(window.innerWidth < 850 ? 2.1 : 3);
+  const [scale, setScale] = useState(window.innerWidth < 850 ? 1.8 : 3);
   const floorPlanRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 

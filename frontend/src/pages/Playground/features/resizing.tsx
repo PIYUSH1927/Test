@@ -41,7 +41,7 @@ type SVGRef = RefObject<SVGSVGElement | null>;
 
 let longPressTimer: number | null = null;
 let isLongPress = false;
-const LONG_PRESS_DURATION = 200;
+const LONG_PRESS_DURATION = 100;
 
 export function setupLongPress(
   event: React.TouchEvent,
