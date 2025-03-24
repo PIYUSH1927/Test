@@ -256,7 +256,7 @@ const Playground = () => {
 
       <div 
       className="three-d-icon" 
-      onClick={() => navigate("/3d")}
+      onClick={() => navigate("/3D")}
     >
       <img src="/3dview.png" alt="3D View" />
     </div>

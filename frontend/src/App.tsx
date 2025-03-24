@@ -13,6 +13,7 @@ import LoginPage from "./pages/LoginPage";
 import Features from "./pages/Features";
 import About from "./pages/AboutUs";
 import Playground from "./pages/Playground";
+import View3D from "./pages/Playground/3D/View3D";
 import './App.css';
 
 const App: React.FC = () => {
@@ -20,6 +21,7 @@ const App: React.FC = () => {
         <Router>
             <Routes>
                 <Route path="/playground" element={<Playground />} />
+                <Route path="/3D" element={<View3D />} />
                 <Route path="*" element={
                     <>
                         <Navbar />
